@@ -114,4 +114,3 @@
 2. **Anthropic API key** for free `count_tokens` measurement. Recommended: a development key with a low spend cap. Do not use a Claude Code OAuth token for `count_tokens` until official documentation says that this works. Action: ASK-SECRET.
 3. **Disk space.** Another process is freeing disk. Do not build an image and do not delete images until the maintainer or the disk work says the box is ready.
 4. **Node 24 vs Node 26.** Default: Node 24.22.3 now, Node 26 later. Veto if the maintainer wants Node 26 immediately.
-
