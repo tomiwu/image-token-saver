@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Start the image-token-saver Sandcastle loop once. Safe to call many times at the same moment.
 # Box operators can also use /workspace/bin/image-token-saver-start-loop.sh (fixed log path).
+# Do not build an image in this script. Do not delete images. Do not run podman reset.
+# Prefer reusing an existing Node-based Sandcastle image or node:22-bookworm when disk is low.
 set -euo pipefail
 umask 077
 NAME=image-token-saver
