@@ -22,6 +22,9 @@ const CLAUDE_MODEL = process.env.CLAUDE_MODEL ?? "claude-sonnet-5-5";
 const REVIEWER_MODEL = process.env.REVIEWER_MODEL ?? "composer-2.5-fast";
 const REVIEWER_CLAUDE_MODEL = process.env.REVIEWER_CLAUDE_MODEL ?? "claude-opus-5-5";
 const LIMIT_ERROR = /credit|quota|usage limit|rate limit|payment|out of (fast )?requests|insufficient/i;
+const PROMPT_SIZE_ERROR = /print-mode prompt is \d+ bytes|max 122880/i;
+const BLOCKED_BY = /Blocked by[:\s*]+((?:#\d+[\s,and]*)+)/gi;
+const ISSUE_REF = /#(\d+)/g;
 const LABEL = "Sandcastle";
 const SKIP = new Set((process.env.SKIP_ISSUES ?? "").split(",").filter(Boolean).map(Number));
 
@@ -42,6 +45,16 @@ function logHasLimitError(name?: string): boolean {
   } catch {
     return false;
   }
+}
+
+function cursorReviewerShouldFallback(errorText: string, logName?: string): boolean {
+  return LIMIT_ERROR.test(errorText) || logHasLimitError(logName) || PROMPT_SIZE_ERROR.test(errorText);
+}
+
+function blockerIssueNumbers(body: string): number[] {
+  return [...body.matchAll(BLOCKED_BY)].flatMap((m) =>
+    [...m[1].matchAll(ISSUE_REF)].map((n) => Number(n[1])),
+  );
 }
 
 async function runWithAgent(
@@ -78,7 +91,7 @@ async function runReviewerOrFixer(sandbox: sandcastle.Sandbox, options: RunOptio
       return result;
     } catch (error) {
       const text = `${error}`;
-      if (LIMIT_ERROR.test(text) || logHasLimitError(options.name) || /print-mode prompt is \d+ bytes|max 122880/i.test(text)) {
+      if (cursorReviewerShouldFallback(text, options.name)) {
         console.log(`Cursor reviewer failed (${text.slice(0, 240)}). Change to ${REVIEWER_CLAUDE_MODEL}.`);
         return sandbox.run({ ...options, agent: sandcastle.claudeCode(REVIEWER_CLAUDE_MODEL) });
       }
@@ -118,11 +131,7 @@ function nextIssue(handled: Set<number>): Issue | undefined {
   // already have a PR. Opening a PR does not close the issue or unblock dependents.
   const openNumbers = new Set(open.map((i) => i.number));
   open.splice(0, open.length, ...open.filter((i) => !handled.has(i.number) && !SKIP.has(i.number)));
-  const ready = open.filter((i) => {
-    const blockers = [...i.body.matchAll(/Blocked by[:\s*]+((?:#\d+[\s,and]*)+)/gi)]
-      .flatMap((m) => [...m[1].matchAll(/#(\d+)/g)].map((n) => Number(n[1])));
-    return blockers.every((b) => !openNumbers.has(b));
-  });
+  const ready = open.filter((i) => blockerIssueNumbers(i.body).every((b) => !openNumbers.has(b)));
   ready.sort((a, b) => priority(a) - priority(b) || a.number - b.number);
   if (open.length && !ready.length) console.log("All open issues are blocked.");
   return ready.find((i) => sh("gh", ["issue", "view", String(i.number), "--json", "state", "--jq", ".state"]) === "OPEN");
@@ -156,6 +165,34 @@ function restoreHostFiles() {
       if (rel.endsWith(".sh")) spawnSync("chmod", ["+x", rel]);
     }
   }
+}
+
+function resetHostMainToOrigin() {
+  spawnSync("git", ["fetch", "origin", "main"], { stdio: "inherit" });
+  spawnSync("git", ["reset", "--hard", "origin/main"], { stdio: "inherit" });
+}
+
+type OpenPr = { url: string; headRefName: string };
+
+function findOpenPrForIssue(issueNumber: number): OpenPr | undefined {
+  const openPrs: OpenPr[] = JSON.parse(
+    sh("gh", ["pr", "list", "--state", "open", "--json", "url,headRefName"]),
+  );
+  return openPrs.find((p) => p.headRefName.startsWith(`sandcastle/issue-${issueNumber}-`));
+}
+
+function latestLocalBranchForIssue(issueNumber: number): string | undefined {
+  const out = spawnSync(
+    "git",
+    [
+      "for-each-ref",
+      "--sort=-committerdate",
+      "--format=%(refname:short)",
+      `refs/heads/sandcastle/issue-${issueNumber}-*`,
+    ],
+    { encoding: "utf8" },
+  ).stdout.trim();
+  return out.split("\n").filter(Boolean)[0];
 }
 
 function bootstrapIssueBranch(branch: string) {
@@ -214,8 +251,7 @@ console.log(`Image: ${IMAGE}`);
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   restoreHostFiles();
   sh("git", ["checkout", "-f", "main"]);
-  spawnSync("git", ["fetch", "origin", "main"], { stdio: "inherit" });
-  spawnSync("git", ["reset", "--hard", "origin/main"], { stdio: "inherit" });
+  resetHostMainToOrigin();
   restoreHostFiles();
   let issue = nextIssue(handled);
   if (!issue) {
@@ -226,14 +262,10 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   if (handled.has(issue.number)) { console.log(`Issue #${issue.number} is already handled. Stopping.`); break; }
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS}: issue #${issue.number} ${issue.title} ===\n`);
 
-  const existing = JSON.parse(sh("gh", ["pr", "list", "--state", "open", "--json", "url,headRefName"]))
-    .find((p: { headRefName: string }) => p.headRefName.startsWith(`sandcastle/issue-${issue.number}-`));
-  const localBranch = spawnSync(
-    "git",
-    ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", `refs/heads/sandcastle/issue-${issue.number}-*`],
-    { encoding: "utf8" },
-  ).stdout.trim().split("\n").filter(Boolean)[0];
-  const branch: string = existing?.headRefName ?? localBranch ?? `sandcastle/issue-${issue.number}-${Date.now()}`;
+  const existing = findOpenPrForIssue(issue.number);
+  const localBranch = latestLocalBranchForIssue(issue.number);
+  const branch: string =
+    existing?.headRefName ?? localBranch ?? `sandcastle/issue-${issue.number}-${Date.now()}`;
   const args = { ISSUE: String(issue.number), BRANCH: branch };
   let passed = Boolean(existing);
   const resumeLocal = !existing && Boolean(localBranch);
