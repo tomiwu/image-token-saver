@@ -7,8 +7,6 @@ import { syntheticImage } from "./synthetic.ts";
 
 async function withChangedRect(
   base: Buffer,
-  width: number,
-  height: number,
   rect: { left: number; top: number; width: number; height: number },
 ): Promise<Buffer> {
   const patch = await sharp({
@@ -25,9 +23,10 @@ async function withChangedRect(
     .composite([{ input: patch, left: rect.left, top: rect.top }])
     .png()
     .toBuffer();
-  const meta = await sharp(out).metadata();
-  assert.equal(meta.width, width);
-  assert.equal(meta.height, height);
+  const baseMeta = await sharp(base).metadata();
+  const outMeta = await sharp(out).metadata();
+  assert.equal(outMeta.width, baseMeta.width);
+  assert.equal(outMeta.height, baseMeta.height);
   return out;
 }
 
@@ -65,7 +64,7 @@ test("diff returns short text for identical frames", async () => {
 test("diff returns the changed rectangle", async () => {
   const previous = await syntheticImage(300, 200, 3);
   const rect = { left: 40, top: 70, width: 60, height: 30 };
-  const image = await withChangedRect(previous, 300, 200, rect);
+  const image = await withChangedRect(previous, rect);
   const result = await diffMethod.apply({
     image,
     previous,

@@ -29,7 +29,8 @@ async function readRaw(bytes: Uint8Array): Promise<RawFrame> {
 }
 
 function findChangedRect(a: RawFrame, b: RawFrame): Rect | undefined {
-  const { width, height } = a;
+  const { width, height, data: aData } = a;
+  const bData = b.data;
   let minX = width;
   let minY = height;
   let maxX = -1;
@@ -38,15 +39,15 @@ function findChangedRect(a: RawFrame, b: RawFrame): Rect | undefined {
     for (let x = 0; x < width; x++) {
       const i = (y * width + x) * 4;
       if (
-        a.data[i] !== b.data[i] ||
-        a.data[i + 1] !== b.data[i + 1] ||
-        a.data[i + 2] !== b.data[i + 2] ||
-        a.data[i + 3] !== b.data[i + 3]
+        aData[i] !== bData[i] ||
+        aData[i + 1] !== bData[i + 1] ||
+        aData[i + 2] !== bData[i + 2] ||
+        aData[i + 3] !== bData[i + 3]
       ) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
       }
     }
   }
@@ -67,9 +68,14 @@ export const diffMethod: ReductionMethod = {
     if (request.previous === undefined) {
       return undefined;
     }
-    const imageBytes = await loadImageBytes(request.image);
-    const current = await readRaw(imageBytes);
-    const previous = await readRaw(await loadImageBytes(request.previous));
+    const [imageBytes, previousBytes] = await Promise.all([
+      loadImageBytes(request.image),
+      loadImageBytes(request.previous),
+    ]);
+    const [current, previous] = await Promise.all([
+      readRaw(imageBytes),
+      readRaw(previousBytes),
+    ]);
     if (
       current.width !== previous.width ||
       current.height !== previous.height
