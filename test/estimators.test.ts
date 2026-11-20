@@ -6,8 +6,8 @@ import {
   estimateGeminiTokens,
   estimateGpt4oTiles,
   estimateGptPatch,
+  estimateTokens,
 } from "../src/estimators.ts";
-import { estimateTokens } from "../src/estimators.ts";
 import { readImageInfo } from "../src/image-io.ts";
 import { syntheticImage } from "./synthetic.ts";
 

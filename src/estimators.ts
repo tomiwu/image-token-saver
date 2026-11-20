@@ -72,30 +72,41 @@ export function estimateClaude(
   return { ...size, tokens: claudePatches(size.width, size.height) };
 }
 
+const GPT4O_BASE_TOKENS = 85;
+const GPT4O_TILE_TOKENS = 170;
+const GPT4O_TILE = 512;
+const GPT4O_MAX_LONG_EDGE = 2048;
+const GPT4O_MAX_SHORT_EDGE = 768;
+
 export function estimateGpt4oTiles(
   width: number,
   height: number,
   detail: "low" | "high",
 ): SizeEstimate & { tiles: number } {
   if (detail === "low") {
-    return { width, height, tiles: 0, tokens: 85 };
+    return { width, height, tiles: 0, tokens: GPT4O_BASE_TOKENS };
   }
   let w = width;
   let h = height;
   const longest = Math.max(w, h);
-  if (longest > 2048) {
-    const scale = 2048 / longest;
+  if (longest > GPT4O_MAX_LONG_EDGE) {
+    const scale = GPT4O_MAX_LONG_EDGE / longest;
     w = Math.floor(w * scale);
     h = Math.floor(h * scale);
   }
   const shortest = Math.min(w, h);
-  if (shortest > 768) {
-    const scale = 768 / shortest;
+  if (shortest > GPT4O_MAX_SHORT_EDGE) {
+    const scale = GPT4O_MAX_SHORT_EDGE / shortest;
     w = Math.floor(w * scale);
     h = Math.floor(h * scale);
   }
-  const tiles = Math.ceil(w / 512) * Math.ceil(h / 512);
-  return { width: w, height: h, tiles, tokens: 85 + 170 * tiles };
+  const tiles = Math.ceil(w / GPT4O_TILE) * Math.ceil(h / GPT4O_TILE);
+  return {
+    width: w,
+    height: h,
+    tiles,
+    tokens: GPT4O_BASE_TOKENS + GPT4O_TILE_TOKENS * tiles,
+  };
 }
 
 const GPT_PATCH = 32;
@@ -116,9 +127,9 @@ export function estimateGptPatch(
     w = Math.floor(w * scale);
     h = Math.floor(h * scale);
   }
-  const count = (): number =>
+  const patchCount = (): number =>
     Math.ceil(w / GPT_PATCH) * Math.ceil(h / GPT_PATCH);
-  if (count() > GPT_PATCH_BUDGET) {
+  if (patchCount() > GPT_PATCH_BUDGET) {
     const shrink = Math.sqrt((GPT_PATCH ** 2 * GPT_PATCH_BUDGET) / (w * h));
     const wPatches = (w * shrink) / GPT_PATCH;
     const hPatches = (h * shrink) / GPT_PATCH;
@@ -129,7 +140,7 @@ export function estimateGptPatch(
     w = Math.max(1, Math.floor(w * shrink * fix));
     h = Math.max(1, Math.floor(h * shrink * fix));
   }
-  const patches = count();
+  const patches = patchCount();
   return {
     width: w,
     height: h,
