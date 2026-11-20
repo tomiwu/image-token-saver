@@ -17,27 +17,47 @@ export interface CropResult {
   estimatedTokens: number;
 }
 
-function validateRect(
-  rect: CropRect,
-  imageWidth: number,
-  imageHeight: number,
-): void {
+function requireIntegerFields(rect: CropRect): void {
   for (const key of ["x", "y", "width", "height"] as const) {
     if (!Number.isInteger(rect[key])) {
       throw new CropError(`The crop value "${key}" must be an integer.`);
     }
   }
+}
+
+function requireOrigin(rect: CropRect): void {
   if (rect.x < 0 || rect.y < 0) {
     throw new CropError("The crop origin must not be negative.");
   }
+}
+
+function requireSize(rect: CropRect): void {
   if (rect.width < 1 || rect.height < 1) {
     throw new CropError("The crop width and height must be at least 1.");
   }
+}
+
+function requireInside(
+  rect: CropRect,
+  imageWidth: number,
+  imageHeight: number,
+): void {
   if (rect.x + rect.width > imageWidth || rect.y + rect.height > imageHeight) {
     throw new CropError(
       `The crop rectangle is outside the image (${imageWidth}x${imageHeight}).`,
     );
   }
+}
+
+function validateRect(
+  rect: CropRect,
+  imageWidth: number,
+  imageHeight: number,
+): void {
+  requireIntegerFields(rect);
+  requireOrigin(rect);
+  requireSize(rect);
+  requireInside(rect, imageWidth, imageHeight);
 }
 
 export async function cropRegion(
