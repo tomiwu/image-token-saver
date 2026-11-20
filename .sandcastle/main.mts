@@ -78,8 +78,8 @@ async function runReviewerOrFixer(sandbox: sandcastle.Sandbox, options: RunOptio
       return result;
     } catch (error) {
       const text = `${error}`;
-      if (LIMIT_ERROR.test(text) || logHasLimitError(options.name)) {
-        console.log(`Cursor reviewer failed (${text.slice(0, 200)}). Change to ${REVIEWER_CLAUDE_MODEL}.`);
+      if (LIMIT_ERROR.test(text) || logHasLimitError(options.name) || /print-mode prompt is \d+ bytes|max 122880/i.test(text)) {
+        console.log(`Cursor reviewer failed (${text.slice(0, 240)}). Change to ${REVIEWER_CLAUDE_MODEL}.`);
         return sandbox.run({ ...options, agent: sandcastle.claudeCode(REVIEWER_CLAUDE_MODEL) });
       }
       throw error;
@@ -114,10 +114,12 @@ function nextIssue(handled: Set<number>): Issue | undefined {
   const open: Issue[] = JSON.parse(
     sh("gh", ["issue", "list", "--state", "open", "--label", LABEL, "--limit", "100", "--json", "number,title,body,labels"]),
   );
-  const openNumbers = new Set(open.map((i) => i.number).filter((n) => !handled.has(n)));
+  // Keep every still-open issue in the blocker set, including issues that
+  // already have a PR. Opening a PR does not close the issue or unblock dependents.
+  const openNumbers = new Set(open.map((i) => i.number));
   open.splice(0, open.length, ...open.filter((i) => !handled.has(i.number) && !SKIP.has(i.number)));
   const ready = open.filter((i) => {
-    const blockers = [...i.body.matchAll(/Blocked by\s+((?:#\d+[\s,and]*)+)/gi)]
+    const blockers = [...i.body.matchAll(/Blocked by[:\s*]+((?:#\d+[\s,and]*)+)/gi)]
       .flatMap((m) => [...m[1].matchAll(/#(\d+)/g)].map((n) => Number(n[1])));
     return blockers.every((b) => !openNumbers.has(b));
   });
@@ -158,7 +160,7 @@ function restoreHostFiles() {
 
 function bootstrapIssueBranch(branch: string) {
   sh("git", ["fetch", "origin", "main"]);
-  sh("git", ["checkout", "-B", branch, "origin/main"]);
+  sh("git", ["checkout", "-f", "-B", branch, "origin/main"]);
   restoreHostFiles();
   const paths = [
     ".sandcastle/Containerfile",
@@ -212,7 +214,8 @@ console.log(`Image: ${IMAGE}`);
 for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   restoreHostFiles();
   sh("git", ["checkout", "-f", "main"]);
-  spawnSync("git", ["pull", "--rebase", "origin", "main"], { stdio: "inherit" });
+  spawnSync("git", ["fetch", "origin", "main"], { stdio: "inherit" });
+  spawnSync("git", ["reset", "--hard", "origin/main"], { stdio: "inherit" });
   restoreHostFiles();
   let issue = nextIssue(handled);
   if (!issue) {
@@ -225,23 +228,37 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
 
   const existing = JSON.parse(sh("gh", ["pr", "list", "--state", "open", "--json", "url,headRefName"]))
     .find((p: { headRefName: string }) => p.headRefName.startsWith(`sandcastle/issue-${issue.number}-`));
-  const branch: string = existing?.headRefName ?? `sandcastle/issue-${issue.number}-${Date.now()}`;
+  const localBranch = spawnSync(
+    "git",
+    ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", `refs/heads/sandcastle/issue-${issue.number}-*`],
+    { encoding: "utf8" },
+  ).stdout.trim().split("\n").filter(Boolean)[0];
+  const branch: string = existing?.headRefName ?? localBranch ?? `sandcastle/issue-${issue.number}-${Date.now()}`;
   const args = { ISSUE: String(issue.number), BRANCH: branch };
   let passed = Boolean(existing);
+  const resumeLocal = !existing && Boolean(localBranch);
 
   if (existing) {
     console.log(`Resume the open PR ${existing.url}.`);
     spawnSync("git", ["fetch", "origin", branch]);
     spawnSync("git", ["branch", "-f", branch, `origin/${branch}`]);
   } else {
-    bootstrapIssueBranch(branch);
+    if (resumeLocal) {
+      console.log(`Resume local branch ${branch} (no open PR yet). Skip the implementer.`);
+      sh("git", ["checkout", "-f", "main"]);
+      restoreHostFiles();
+    } else {
+      bootstrapIssueBranch(branch);
+    }
     const sandbox = await sandcastle.createSandbox({ branch, sandbox: sandboxRuntime(), hooks });
     try {
-      const implement = await runImplementer(sandbox, {
-        name: "implementer", maxIterations: 1,
-        promptFile: "./.sandcastle/implement-prompt.md", promptArgs: args,
-      });
-      if (!implement.commits.length) { console.log(`No commits for #${issue.number}. Stopping.`); break; }
+      if (!resumeLocal) {
+        const implement = await runImplementer(sandbox, {
+          name: "implementer", maxIterations: 1,
+          promptFile: "./.sandcastle/implement-prompt.md", promptArgs: args,
+        });
+        if (!implement.commits.length) { console.log(`No commits for #${issue.number}. Stopping.`); break; }
+      }
 
       await runReviewerOrFixer(sandbox, {
         name: "reviewer", maxIterations: 1,
