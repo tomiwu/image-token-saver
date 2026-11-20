@@ -5,7 +5,9 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import sharp from "sharp";
 import { syntheticImage } from "./synthetic.ts";
 
-async function connect(): Promise<Client> {
+async function withClient(
+  run: (client: Client) => Promise<void>,
+): Promise<void> {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: ["src/cli.ts"],
@@ -13,23 +15,23 @@ async function connect(): Promise<Client> {
   });
   const client = new Client({ name: "test-client", version: "0.0.0" });
   await client.connect(transport);
-  return client;
-}
-
-test("the server lists its tools", async () => {
-  const client = await connect();
   try {
-    const { tools } = await client.listTools();
-    const names = tools.map((tool) => tool.name).sort();
-    assert.deepEqual(names, ["estimate_tokens", "reduce_image"]);
+    await run(client);
   } finally {
     await client.close();
   }
+}
+
+test("the server lists its tools", async () => {
+  await withClient(async (client) => {
+    const { tools } = await client.listTools();
+    const names = tools.map((tool) => tool.name).sort();
+    assert.deepEqual(names, ["estimate_tokens", "reduce_image"]);
+  });
 });
 
 test("reduce_image returns a smaller image and an estimate", async () => {
-  const client = await connect();
-  try {
+  await withClient(async (client) => {
     const png = await syntheticImage(1872, 1404, 3);
     const result = await client.callTool({
       name: "reduce_image",
@@ -53,14 +55,11 @@ test("reduce_image returns a smaller image and an estimate", async () => {
     assert.equal(info.method, "resize");
     assert.equal(info.width, 1270);
     assert.equal(info.height, 952);
-  } finally {
-    await client.close();
-  }
+  });
 });
 
 test("estimate_tokens returns an estimate", async () => {
-  const client = await connect();
-  try {
+  await withClient(async (client) => {
     const png = await syntheticImage(936, 702, 1);
     const result = await client.callTool({
       name: "estimate_tokens",
@@ -72,20 +71,15 @@ test("estimate_tokens returns an estimate", async () => {
       unknown
     >;
     assert.equal(info.tokens, 884);
-  } finally {
-    await client.close();
-  }
+  });
 });
 
 test("a bad image gives a tool error", async () => {
-  const client = await connect();
-  try {
+  await withClient(async (client) => {
     const result = await client.callTool({
       name: "reduce_image",
       arguments: { image: "bm90IGFuIGltYWdl", model: "gpt-4o" },
     });
     assert.equal(result.isError, true);
-  } finally {
-    await client.close();
-  }
+  });
 });

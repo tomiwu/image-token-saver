@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { estimateTokens } from "./estimators.ts";
-import { readImageInfo } from "./image-io.ts";
+import { estimateTokens, type TargetModel } from "./estimators.ts";
+import { readImageInfo, type ImageInput } from "./image-io.ts";
 import { resizeMethod, unreducedTokens } from "./resize.ts";
 
 const MODELS = [
@@ -12,16 +12,16 @@ const MODELS = [
   "gpt-4.1-mini",
   "gpt-5.2",
   "gemini-3",
-] as const;
+] as const satisfies readonly TargetModel[];
 
-const inputShape = {
+const toolInputSchema = {
   image: z
     .string()
     .describe("Base64 image bytes, or an absolute path to an image file."),
   model: z.enum(MODELS).describe("The target vision model."),
 };
 
-function decodeImage(value: string): string | Uint8Array {
+function decodeImage(value: string): ImageInput {
   return value.startsWith("/") ? value : Buffer.from(value, "base64");
 }
 
@@ -42,7 +42,7 @@ export function createServer(): McpServer {
     {
       description:
         "Estimate the input tokens of an image for a target model. Uses official formulas only.",
-      inputSchema: inputShape,
+      inputSchema: toolInputSchema,
     },
     async ({ image, model }): Promise<CallToolResult> => {
       try {
@@ -64,7 +64,7 @@ export function createServer(): McpServer {
     {
       description:
         "Reduce an image for a target model. Returns the reduced image and the token estimates before and after.",
-      inputSchema: inputShape,
+      inputSchema: toolInputSchema,
     },
     async ({ image, model }): Promise<CallToolResult> => {
       try {
