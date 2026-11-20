@@ -62,15 +62,43 @@ async function softenedBackground(
     .resize(
       Math.max(1, Math.round(width / factor)),
       Math.max(1, Math.round(height / factor)),
-      {
-        kernel: "lanczos3",
-      },
+      { kernel: "lanczos3" },
     )
     .toBuffer();
   return sharp(small)
     .resize(width, height, { kernel: "nearest" })
     .png()
     .toBuffer();
+}
+
+async function renderFocusMask(
+  source: Uint8Array,
+  options: FocusMaskOptions,
+  width: number,
+  height: number,
+): Promise<{ data: Buffer; width: number; height: number }> {
+  const background = await softenedBackground(source, options, width, height);
+  const regionPatch = await sharp(source)
+    .extract(options.region)
+    .png()
+    .toBuffer();
+  let pipeline = sharp(background).composite([
+    {
+      input: regionPatch,
+      left: options.region.left,
+      top: options.region.top,
+    },
+  ]);
+  if (options.resizeTo) {
+    pipeline = sharp(await pipeline.png().toBuffer()).resize(
+      options.resizeTo.width,
+      options.resizeTo.height,
+    );
+  }
+  const { data, info } = await pipeline
+    .png()
+    .toBuffer({ resolveWithObject: true });
+  return { data, width: info.width, height: info.height };
 }
 
 export function createFocusMaskMethod(
@@ -87,38 +115,17 @@ export function createFocusMaskMethod(
       const { width, height } = meta;
       checkRegion(options.region, width, height);
 
-      const background = await softenedBackground(
-        bytes,
-        options,
-        width,
-        height,
-      );
-      const sharpPatch = await sharp(bytes)
-        .extract(options.region)
-        .png()
-        .toBuffer();
-      let pipeline = sharp(background).composite([
-        {
-          input: sharpPatch,
-          left: options.region.left,
-          top: options.region.top,
-        },
-      ]);
-      if (options.resizeTo) {
-        pipeline = sharp(await pipeline.png().toBuffer()).resize(
-          options.resizeTo.width,
-          options.resizeTo.height,
-        );
-      }
-      const { data, info } = await pipeline
-        .png()
-        .toBuffer({ resolveWithObject: true });
+      const rendered = await renderFocusMask(bytes, options, width, height);
       return {
         method: "focus-mask",
-        image: data,
-        width: info.width,
-        height: info.height,
-        estimatedTokens: estimateTokens(info.width, info.height, request.model),
+        image: rendered.data,
+        width: rendered.width,
+        height: rendered.height,
+        estimatedTokens: estimateTokens(
+          rendered.width,
+          rendered.height,
+          request.model,
+        ),
       };
     },
   };
