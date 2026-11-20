@@ -28,21 +28,43 @@ export interface FocusMaskOptions {
 const DEFAULT_SIGMA = 8;
 const DEFAULT_FACTOR = 4;
 
-function checkRegion(region: FocusRegion, width: number, height: number): void {
+function requireWholeNumbers(region: FocusRegion): void {
   const values = [region.left, region.top, region.width, region.height];
   if (!values.every(Number.isInteger)) {
     throw new Error("The region must use whole numbers.");
   }
+}
+
+function requireOrigin(region: FocusRegion): void {
+  if (region.left < 0 || region.top < 0) {
+    throw new Error("The region must be inside the image.");
+  }
+}
+
+function requireSize(region: FocusRegion): void {
+  if (region.width < 1 || region.height < 1) {
+    throw new Error("The region must be inside the image.");
+  }
+}
+
+function requireInside(
+  region: FocusRegion,
+  width: number,
+  height: number,
+): void {
   if (
-    region.left < 0 ||
-    region.top < 0 ||
-    region.width < 1 ||
-    region.height < 1 ||
     region.left + region.width > width ||
     region.top + region.height > height
   ) {
     throw new Error("The region must be inside the image.");
   }
+}
+
+function checkRegion(region: FocusRegion, width: number, height: number): void {
+  requireWholeNumbers(region);
+  requireOrigin(region);
+  requireSize(region);
+  requireInside(region, width, height);
 }
 
 async function softenedBackground(
