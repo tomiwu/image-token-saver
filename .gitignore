@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.sandcastle/.env
+.sandcastle/logs/
+.sandcastle/worktrees/
+*.log
+.DS_Store
+
+# Local sample renders must never be committed.
+samples/
+sample-renders/
+local-samples/
