@@ -3,6 +3,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { estimateTokens, type TargetModel } from "./estimators.ts";
 import { readImageInfo, type ImageInput } from "./image-io.ts";
+import type { MethodResult } from "./method.ts";
 import { resizeMethod, unreducedTokens } from "./resize.ts";
 
 const MODELS = [
@@ -32,6 +33,65 @@ function json(value: unknown): { type: "text"; text: string } {
 function failure(error: unknown): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   return { isError: true, content: [{ type: "text", text: message }] };
+}
+
+function reduceSummary(
+  model: TargetModel,
+  info: { width: number; height: number },
+  tokensBefore: number,
+  result: MethodResult | undefined,
+) {
+  if (!result) {
+    return {
+      model,
+      method: "none",
+      tokensBefore,
+      tokensAfter: tokensBefore,
+      width: info.width,
+      height: info.height,
+    };
+  }
+  return {
+    model,
+    method: result.method,
+    tokensBefore,
+    tokensAfter: result.estimatedTokens,
+    width: result.width,
+    height: result.height,
+  };
+}
+
+function reduceContent(
+  result: MethodResult | undefined,
+  summary: ReturnType<typeof reduceSummary>,
+): CallToolResult {
+  if (!result?.image) {
+    return { content: [json(summary)] };
+  }
+  return {
+    content: [
+      {
+        type: "image",
+        data: Buffer.from(result.image).toString("base64"),
+        mimeType: "image/png",
+      },
+      json(summary),
+    ],
+  };
+}
+
+async function runReduce(
+  image: string,
+  model: TargetModel,
+): Promise<CallToolResult> {
+  const input = decodeImage(image);
+  const info = await readImageInfo(input);
+  const tokensBefore = unreducedTokens(info.width, info.height, model);
+  const result = await resizeMethod.apply({ image: input, model });
+  return reduceContent(
+    result,
+    reduceSummary(model, info, tokensBefore, result),
+  );
 }
 
 export function createServer(): McpServer {
@@ -68,31 +128,7 @@ export function createServer(): McpServer {
     },
     async ({ image, model }): Promise<CallToolResult> => {
       try {
-        const input = decodeImage(image);
-        const info = await readImageInfo(input);
-        const tokensBefore = unreducedTokens(info.width, info.height, model);
-        const result = await resizeMethod.apply({ image: input, model });
-        const summary = {
-          model,
-          method: result?.method ?? "none",
-          tokensBefore,
-          tokensAfter: result?.estimatedTokens ?? tokensBefore,
-          width: result?.width ?? info.width,
-          height: result?.height ?? info.height,
-        };
-        if (!result?.image) {
-          return { content: [json(summary)] };
-        }
-        return {
-          content: [
-            {
-              type: "image",
-              data: Buffer.from(result.image).toString("base64"),
-              mimeType: "image/png",
-            },
-            json(summary),
-          ],
-        };
+        return await runReduce(image, model);
       } catch (error) {
         return failure(error);
       }
