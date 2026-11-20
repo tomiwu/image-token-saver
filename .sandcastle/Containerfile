@@ -1,0 +1,70 @@
+# Sandcastle image for image-token-saver.
+# Reuse the local node:22-bookworm base so the build does not pull a new large base image.
+# Overlay official Node.js 24.22.3 to match the PRD runtime.
+# Do not run podman reset or podman prune -a. Do not remove other projects' images.
+# Do not run this build at the same time as another image build.
+FROM docker.io/library/node:22-bookworm
+
+RUN apt-get -o Acquire::Retries=5 update && apt-get install -y --no-install-recommends \
+  git \
+  curl \
+  jq \
+  ca-certificates \
+  xz-utils \
+  gnupg \
+  python3 \
+  build-essential \
+  pkg-config \
+  libvips42 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Official Node.js 24.22.3 (linux-x64). SHA-256 from nodejs.org SHASUMS256.txt on 20 November 2026.
+ENV NODE24_VERSION=24.22.3
+ENV NODE24_SHA256=4f2b175a6d53a5c617a80dba2676238a0688cef28c6da4eba35c7d844e66fcfb
+# Extract into a new prefix. Overlaying onto /usr/local mixes Node 22 and Node 24
+# npm modules and breaks npm ("Class extends value undefined is not a constructor").
+ENV PATH="/usr/local/lib/nodejs/bin:${PATH}"
+RUN curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v${NODE24_VERSION}/node-v${NODE24_VERSION}-linux-x64.tar.xz" \
+  && echo "${NODE24_SHA256}  /tmp/node.tar.xz" | sha256sum -c - \
+  && mkdir -p /usr/local/lib/nodejs \
+  && tar -xJf /tmp/node.tar.xz -C /usr/local/lib/nodejs --strip-components=1 \
+  && rm /tmp/node.tar.xz \
+  && node -v && npm -v && which node && which npm
+
+# GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+  | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+  | tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+  && apt-get -o Acquire::Retries=5 update && apt-get install -y gh \
+  && rm -rf /var/lib/apt/lists/*
+
+# Claude Code is pinned to 2.1.322 to match the other loops on this box.
+# CI tools match the PRD / issue #3 jobs: format (Prettier), lint (ESLint), typecheck (TypeScript), tests (node:test).
+RUN npm install -g \
+  @anthropic-ai/claude-code@2.1.322 \
+  typescript@7.0.2 \
+  prettier@3.10.1 \
+  eslint@10.15.0
+
+ARG AGENT_UID=1000
+ARG AGENT_GID=1000
+
+# Rename the base image's "node" user to "agent" and align UID/GID.
+RUN groupmod -o -g $AGENT_GID node && usermod -o -u $AGENT_UID -g $AGENT_GID -d /home/agent -m -l agent node
+USER ${AGENT_UID}:${AGENT_GID}
+
+# Cursor CLI fetches plugins over SSH. The sandbox has no SSH key, so use HTTPS.
+RUN git config --global url."https://github.com/".insteadOf "git@github.com:" \
+  && git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+
+# Install Cursor Agent CLI (optional reviewer).
+RUN curl https://cursor.com/install -fsS | bash
+
+ENV PATH="/home/agent/.local/bin:/usr/local/lib/nodejs/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+WORKDIR /home/agent
+
+# In worktree sandbox mode, Sandcastle bind-mounts the git worktree at /home/agent/workspace
+# and overrides the working directory to /home/agent/workspace at container start.
+ENTRYPOINT ["sleep", "infinity"]
