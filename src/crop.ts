@@ -1,14 +1,7 @@
 import sharp from "sharp";
 import { estimateTokens, type TargetModel } from "./estimators.ts";
 import { loadImageBytes, readImageInfo, type ImageInput } from "./image-io.ts";
-import type { MethodResult, ReductionMethod } from "./method.ts";
-
-export interface CropRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { CropRect, MethodResult, ReductionMethod } from "./method.ts";
 
 export class CropError extends Error {
   constructor(message: string) {
@@ -52,9 +45,9 @@ export async function cropRegion(
   rect: CropRect,
   model: TargetModel,
 ): Promise<CropResult> {
-  const info = await readImageInfo(input);
-  validateRect(rect, info.width, info.height);
   const bytes = await loadImageBytes(input);
+  const info = await readImageInfo(bytes);
+  validateRect(rect, info.width, info.height);
   const image = await sharp(bytes)
     .extract({
       left: rect.x,

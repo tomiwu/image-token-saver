@@ -17,10 +17,10 @@ test("crop returns the requested rectangle", async () => {
   assert.equal(result.height, 40);
   const expected = await sharp(image)
     .extract({
-      left: 30,
-      top: 20,
-      width: 64,
-      height: 40,
+      left: rect.x,
+      top: rect.y,
+      width: rect.width,
+      height: rect.height,
     })
     .raw()
     .toBuffer();

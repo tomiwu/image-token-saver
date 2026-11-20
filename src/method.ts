@@ -1,6 +1,12 @@
 import type { ImageInput } from "./image-io.ts";
 import type { TargetModel } from "./estimators.ts";
-import type { CropRect } from "./crop.ts";
+
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface MethodRequest {
   image: ImageInput;
