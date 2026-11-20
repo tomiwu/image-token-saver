@@ -5,3 +5,4 @@ export * from "./methods/colour-depth.ts";
 export * from "./resize.ts";
 export * from "./server.ts";
 export * from "./crop.ts";
+export * from "./focus-mask.ts";
