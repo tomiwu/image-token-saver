@@ -1,0 +1,5 @@
+node_modules/
+dist/
+coverage/
+.sandcastle/
+package-lock.json

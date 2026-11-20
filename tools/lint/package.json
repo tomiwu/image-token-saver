@@ -1,0 +1,12 @@
+{
+  "name": "image-token-saver-lint",
+  "private": true,
+  "type": "module",
+  "description": "Lint toolchain. It uses the TypeScript 6 API because typescript-eslint does not support TypeScript 7.",
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.15.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0"
+  }
+}
