@@ -127,18 +127,20 @@ export function analyzeSource(fileName: string, text: string): FunctionInfo[] {
 }
 
 export function parseLcov(text: string): Map<string, LineHits> {
-  const files = new Map<string, LineHits>();
-  let current: LineHits | undefined;
+  const hitsByFile = new Map<string, LineHits>();
+  let currentFile: LineHits | undefined;
   for (const line of text.split("\n")) {
     if (line.startsWith("SF:")) {
-      current = new Map();
-      files.set(line.slice(3), current);
-    } else if (line.startsWith("DA:") && current !== undefined) {
+      currentFile = new Map();
+      hitsByFile.set(line.slice(3), currentFile);
+      continue;
+    }
+    if (line.startsWith("DA:") && currentFile !== undefined) {
       const [number, hits] = line.slice(3).split(",");
-      current.set(Number(number), Number(hits));
+      currentFile.set(Number(number), Number(hits));
     }
   }
-  return files;
+  return hitsByFile;
 }
 
 function coverageOf(fn: FunctionInfo, hits: LineHits): number {

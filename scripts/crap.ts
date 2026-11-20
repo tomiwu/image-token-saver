@@ -38,13 +38,10 @@ function runCoverage(): void {
 
 function collectRows(): CrapRow[] {
   const coverage = parseLcov(readFileSync(LCOV, "utf8"));
-  return SOURCE_DIRS.flatMap(listSources).flatMap((path) =>
-    scoreFile(
-      relative(ROOT, path),
-      readFileSync(path, "utf8"),
-      coverage.get(relative(ROOT, path)),
-    ),
-  );
+  return SOURCE_DIRS.flatMap(listSources).flatMap((path) => {
+    const rel = relative(ROOT, path);
+    return scoreFile(rel, readFileSync(path, "utf8"), coverage.get(rel));
+  });
 }
 
 runCoverage();
