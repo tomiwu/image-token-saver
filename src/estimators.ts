@@ -162,22 +162,26 @@ export function estimateGeminiTokens(
   return GEMINI_TOKENS[resolution];
 }
 
+const ESTIMATE_BY_MODEL: Record<
+  TargetModel,
+  (width: number, height: number) => number
+> = {
+  "claude-standard": (width, height) =>
+    estimateClaude(width, height, "standard").tokens,
+  "claude-high-res": (width, height) =>
+    estimateClaude(width, height, "high-res").tokens,
+  "gpt-4o": (width, height) => estimateGpt4oTiles(width, height, "high").tokens,
+  "gpt-4.1-mini": (width, height) =>
+    estimateGptPatch(width, height, "gpt-4.1-mini").tokens,
+  "gpt-5.2": (width, height) =>
+    estimateGptPatch(width, height, "gpt-5.2").tokens,
+  "gemini-3": () => estimateGeminiTokens(),
+};
+
 export function estimateTokens(
   width: number,
   height: number,
   model: TargetModel,
 ): number {
-  switch (model) {
-    case "claude-standard":
-      return estimateClaude(width, height, "standard").tokens;
-    case "claude-high-res":
-      return estimateClaude(width, height, "high-res").tokens;
-    case "gpt-4o":
-      return estimateGpt4oTiles(width, height, "high").tokens;
-    case "gpt-4.1-mini":
-    case "gpt-5.2":
-      return estimateGptPatch(width, height, model).tokens;
-    case "gemini-3":
-      return estimateGeminiTokens();
-  }
+  return ESTIMATE_BY_MODEL[model](width, height);
 }
