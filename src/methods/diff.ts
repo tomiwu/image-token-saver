@@ -28,38 +28,58 @@ async function readRaw(bytes: Uint8Array): Promise<RawFrame> {
   return { data, width: info.width, height: info.height };
 }
 
-function findChangedRect(a: RawFrame, b: RawFrame): Rect | undefined {
-  const { width, height, data: aData } = a;
-  const bData = b.data;
-  let minX = width;
-  let minY = height;
-  let maxX = -1;
-  let maxY = -1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4;
-      if (
-        aData[i] !== bData[i] ||
-        aData[i + 1] !== bData[i + 1] ||
-        aData[i + 2] !== bData[i + 2] ||
-        aData[i + 3] !== bData[i + 3]
-      ) {
-        minX = Math.min(minX, x);
-        maxX = Math.max(maxX, x);
-        minY = Math.min(minY, y);
-        maxY = Math.max(maxY, y);
-      }
+interface Bounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+function pixelsDiffer(aData: Buffer, bData: Buffer, i: number): boolean {
+  for (let channel = 0; channel < 4; channel++) {
+    if (aData[i + channel] !== bData[i + channel]) {
+      return true;
     }
   }
-  if (maxX < 0) {
+  return false;
+}
+
+function emptyBounds(width: number, height: number): Bounds {
+  return { minX: width, minY: height, maxX: -1, maxY: -1 };
+}
+
+function includePoint(bounds: Bounds, x: number, y: number): void {
+  bounds.minX = Math.min(bounds.minX, x);
+  bounds.maxX = Math.max(bounds.maxX, x);
+  bounds.minY = Math.min(bounds.minY, y);
+  bounds.maxY = Math.max(bounds.maxY, y);
+}
+
+function rectFromBounds(bounds: Bounds): Rect | undefined {
+  if (bounds.maxX < 0) {
     return undefined;
   }
   return {
-    left: minX,
-    top: minY,
-    width: maxX - minX + 1,
-    height: maxY - minY + 1,
+    left: bounds.minX,
+    top: bounds.minY,
+    width: bounds.maxX - bounds.minX + 1,
+    height: bounds.maxY - bounds.minY + 1,
   };
+}
+
+function findChangedRect(a: RawFrame, b: RawFrame): Rect | undefined {
+  const { width, height, data: aData } = a;
+  const bData = b.data;
+  const bounds = emptyBounds(width, height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      if (pixelsDiffer(aData, bData, i)) {
+        includePoint(bounds, x, y);
+      }
+    }
+  }
+  return rectFromBounds(bounds);
 }
 
 export const diffMethod: ReductionMethod = {
