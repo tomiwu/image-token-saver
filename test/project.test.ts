@@ -7,6 +7,7 @@ test("package.json pins the stack versions", () => {
     engines?: { node?: string };
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
+    bin?: Record<string, string>;
   };
 
   assert.equal(pkg.engines?.node, "24.22.3");
@@ -14,8 +15,9 @@ test("package.json pins the stack versions", () => {
     pkg.devDependencies?.["@typescript/native"],
     "npm:typescript@7.0.2",
   );
-  assert.equal(pkg.dependencies?.["@modelcontextprotocol/sdk"], "1.32.2");
   assert.equal(pkg.dependencies?.sharp, "0.35.5");
+  assert.equal(pkg.bin?.["image-token-saver"], "src/cli.ts");
+  assert.equal(pkg.dependencies?.["@modelcontextprotocol/sdk"], undefined);
   assert.equal(pkg.devDependencies?.prettier, "3.10.1");
   assert.equal(pkg.devDependencies?.eslint, "10.15.0");
 });

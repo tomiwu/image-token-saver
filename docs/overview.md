@@ -13,7 +13,7 @@
 ## Parts
 
 - A local library.
-- A local MCP server on stdio. It wraps the library.
+- A local CLI that wraps the library. An MCP server on stdio is postponed.
 
 ## Rules
 
