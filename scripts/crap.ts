@@ -9,6 +9,7 @@ import {
   scoreFile,
   type CrapRow,
 } from "./crap-core.ts";
+import { ffmpegBinDir } from "./ffmpeg-env.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const LCOV = join(ROOT, "coverage", "lcov.info");
@@ -32,7 +33,11 @@ function runCoverage(): void {
       `--test-reporter-destination=${LCOV}`,
       "test/*.test.ts",
     ],
-    { cwd: ROOT, stdio: ["ignore", "ignore", "inherit"] },
+    {
+      cwd: ROOT,
+      env: { ...process.env, PATH: `${ffmpegBinDir}:${process.env.PATH}` },
+      stdio: ["ignore", "ignore", "inherit"],
+    },
   );
 }
 
