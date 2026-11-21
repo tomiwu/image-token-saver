@@ -1,0 +1,3 @@
+This is a screenshot of an e-ink calendar UI. List every visual or content bug you can see (layout, overlap, clipping, wrong dates, typos). Answer as a numbered list; say NONE if there are none.
+
+Screenshot file: {{image}}

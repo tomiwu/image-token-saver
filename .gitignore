@@ -11,3 +11,13 @@ coverage/
 samples/
 sample-renders/
 local-samples/
+
+# Eval outputs and sample-derived images are not committed.
+# They live under EVALS_IMAGE_DIR (see evals/README.md).
+evals/results.json
+evals/results.html
+evals/results-table.html
+evals/REPORT.md
+evals/summary.png
+evals/raw/
+evals/promptfooconfig.resolved.yaml
