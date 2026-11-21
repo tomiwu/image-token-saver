@@ -110,6 +110,22 @@ function priority(issue: Issue): number {
   return values.length ? Math.min(...values) : PRIORITY["priority: medium"];
 }
 
+function branchHasWork(branch: string): boolean {
+  const ran = spawnSync(
+    "git",
+    ["log", "--format=%s", `main..${branch}`],
+    { encoding: "utf8" },
+  );
+  if (ran.status !== 0) {
+    return false;
+  }
+  return ran.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .some((subject) => !subject.startsWith("RALPH: bootstrap"));
+}
+
 function nextIssue(handled: Set<number>): Issue | undefined {
   const open: Issue[] = JSON.parse(
     sh("gh", ["issue", "list", "--state", "open", "--label", LABEL, "--limit", "100", "--json", "number,title,body,labels"]),
@@ -236,7 +252,11 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   const branch: string = existing?.headRefName ?? localBranch ?? `sandcastle/issue-${issue.number}-${Date.now()}`;
   const args = { ISSUE: String(issue.number), BRANCH: branch };
   let passed = Boolean(existing);
-  const resumeLocal = !existing && Boolean(localBranch);
+  // A leftover branch with only the bootstrap commit is not work.
+  // The last implementer may have died before the first real commit
+  // (for example a Claude 5-hour limit). Do not skip the implementer.
+  const resumeLocal =
+    !existing && Boolean(localBranch) && branchHasWork(branch);
 
   if (existing) {
     console.log(`Resume the open PR ${existing.url}.`);
