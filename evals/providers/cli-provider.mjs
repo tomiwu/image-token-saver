@@ -197,7 +197,7 @@ function parseCliJson(stdout) {
   }
 }
 
-function runCommand(command, args, { timeoutMs, cwd } = {}) {
+function runCommand(command, args, { timeoutMs, cwd, stdin } = {}) {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     // Subscription CLIs must use the box login, not an API key.
@@ -208,8 +208,11 @@ function runCommand(command, args, { timeoutMs, cwd } = {}) {
     const child = spawn(command, args, {
       cwd,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     });
+    if (stdin !== undefined) {
+      child.stdin.end(stdin);
+    }
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -240,6 +243,62 @@ function maybeImageArgs(image) {
     return [];
   }
   return ["--add-dir", dirname(image)];
+}
+
+function inlineMessage(prompt, imageBytes) {
+  return `${JSON.stringify({
+    type: "user",
+    message: {
+      role: "user",
+      content: [
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/png",
+            data: imageBytes.toString("base64"),
+          },
+        },
+        { type: "text", text: prompt },
+      ],
+    },
+  })}\n`;
+}
+
+function buildInlineClaudeArgs(config) {
+  const args = [
+    "-p",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--permission-mode",
+    "dontAsk",
+    "--tools",
+    "",
+  ];
+  if (config.model) {
+    args.push("--model", config.model);
+  }
+  return { command: "claude", args };
+}
+
+function lastResultLine(stdout) {
+  const lines = String(stdout || "")
+    .split(/\r?\n/)
+    .filter((line) => line.trim().startsWith("{"));
+  for (const line of lines.reverse()) {
+    try {
+      const payload = JSON.parse(line);
+      if (payload.type === "result") {
+        return JSON.stringify(payload);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return stdout;
 }
 
 function buildClaudeArgs(config, prompt, image) {
@@ -342,17 +401,28 @@ export default class SubscriptionCliProvider {
       };
     }
 
-    const { command, args } = buildArgs(this.config, prompt, image);
+    const inline = context?.vars?.delivery === "inline";
+    if (inline && this.config.cli !== "claude") {
+      return { error: "Inline delivery needs the claude CLI" };
+    }
+    const { command, args } = inline
+      ? buildInlineClaudeArgs(this.config)
+      : buildArgs(this.config, prompt, image);
     const timeoutMs = Number(this.config.timeoutMs) || DEFAULT_TIMEOUT_MS;
     const cwd = process.env.EVALS_WORKSPACE || process.cwd();
     let ran;
     try {
-      ran = await runCommand(command, args, { timeoutMs, cwd });
+      const stdin = inline
+        ? inlineMessage(prompt, await readFile(image))
+        : undefined;
+      ran = await runCommand(command, args, { timeoutMs, cwd, stdin });
     } catch (err) {
       return { error: String(err?.message || err) };
     }
 
-    const parsed = parseCliJson(ran.stdout);
+    const parsed = parseCliJson(
+      inline ? lastResultLine(ran.stdout) : ran.stdout,
+    );
     const output = (
       parsed.output || extractText(parsed.payload, ran.stdout)
     ).trim();
@@ -388,6 +458,8 @@ export default class SubscriptionCliProvider {
       scale: scaleName(context),
       run: runName(context),
       inputKind: kind,
+      delivery: inline ? "inline" : "tool",
+      caseId: context?.vars?.case_id ?? null,
       image: image || null,
       estimateClaude: context?.vars?.estimate_claude ?? null,
       estimateClaudeRaw: context?.vars?.estimate_claude_raw ?? null,

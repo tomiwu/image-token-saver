@@ -7,7 +7,8 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { scoreOutput } from "./score.mjs";
+import { scoreCase } from "./cases.mjs";
+import { groupByCase, toolOverhead } from "./stats.mjs";
 import { writeMethodReports } from "./report-methods.mjs";
 
 function warsawStamp(iso) {
@@ -89,11 +90,13 @@ export function tabulate(rows) {
     const error = row.error || row.response?.error;
     const usage = row.response?.tokenUsage || row.tokenUsage;
     const measured = typeof usage?.total === "number" ? usage.total : undefined;
-    const score = scoreOutput(output || "");
+    const caseId = vars.case_id || "buggy-01";
+    const score = scoreCase(caseId, output || "");
     const estimateClaude = Number(vars.estimate_claude);
     const estimateClaudeRaw = Number(vars.estimate_claude_raw);
     cells.push({
       provider,
+      caseId,
       scale,
       run: vars.run === undefined || vars.run === "" ? "1" : String(vars.run),
       width: vars.width,
@@ -343,6 +346,83 @@ function usageMarkdown(rows) {
   return `${fixed.join("\n")}\n`;
 }
 
+function mean(values) {
+  const nums = values.filter((v) => typeof v === "number");
+  if (!nums.length) return undefined;
+  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
+}
+
+function groupLabel(group) {
+  const scale = group.cells[0].scale;
+  return group.caseId === "buggy-01" ? `buggy-01 ${scale}` : group.caseId;
+}
+
+function groupTokens(group) {
+  const value = mean(group.cells.map((c) => c.measuredPrompt));
+  return value === undefined ? "no measured usage" : `${value} measured`;
+}
+
+function groupModels(group) {
+  const models = new Set(group.cells.map((c) => c.model).filter(Boolean));
+  return models.size ? [...models].join(", ") : "not reported";
+}
+
+export function passRateMarkdown(cells, meta = {}) {
+  const lines = ["## Pass rate per case", ""];
+  lines.push(
+    "A run passes when the model finds every seeded bug and reports no false positive. The clean image has no seeded bug, so a run passes only with zero reported items. Token cells are the mean measured prompt tokens over the runs.",
+    "",
+  );
+  if (meta.cliVersions) {
+    for (const [cli, version] of Object.entries(meta.cliVersions)) {
+      lines.push(`- CLI version, ${cli}: ${version}`);
+    }
+    lines.push("");
+  }
+  lines.push(
+    "| Model | Model id | Case | Pass rate | Mean bugs found | Mean FP | Tokens |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
+  );
+  for (const group of groupByCase(cells)) {
+    const found = mean(group.cells.map((c) => c.score.foundCount * 100));
+    const fp = mean(group.cells.map((c) => c.score.falsePositives * 100));
+    const total = group.cells[0].score.total;
+    lines.push(
+      `| ${group.provider} | ${groupModels(group)} | ${groupLabel(group)} | ${group.rate.text} passed | ${(found ?? 0) / 100} of ${total} | ${(fp ?? 0) / 100} | ${groupTokens(group)} |`,
+    );
+  }
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
+export function baselineMarkdown(cells) {
+  const pick = (scale) =>
+    cells.filter((c) => c.caseId === "buggy-01" && c.scale === scale);
+  const mp = (scale) => mean(pick(scale).map((c) => c.measuredPrompt));
+  const baseline = mp("full-no-tool");
+  const withTool = mp("full");
+  const lines = ["## Full-size no-tool baseline", ""];
+  if (baseline === undefined) {
+    lines.push("The baseline row has no measured usage in this run.", "");
+    return `${lines.join("\n")}\n`;
+  }
+  lines.push(
+    "The baseline row sends the full image inline with no tools. All numbers are measured from the CLI usage JSON.",
+    "",
+    "| Row | Mean measured prompt tokens |",
+    "| --- | --- |",
+    `| full, no tool (baseline) | ${baseline} measured |`,
+  );
+  if (withTool !== undefined) {
+    lines.push(
+      `| full, Read tool | ${withTool} measured |`,
+      `| fixed tool cost (difference) | ${toolOverhead(withTool, baseline)} measured |`,
+    );
+  }
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
 export function renderReport(cells, meta = {}) {
   const providers = providersIn(cells);
   const lines = [];
@@ -357,6 +437,8 @@ export function renderReport(cells, meta = {}) {
     "This report gives the scores for the screenshot bug eval. The scores use deterministic javascript checks and regular expressions against the answer key. The optional llm-rubric grader is off. This report does not use that grader. The false-positive count (FP) is the number of reported items that do not match a seeded bug.",
   );
   lines.push("");
+  lines.push(passRateMarkdown(cells, meta));
+  lines.push(baselineMarkdown(cells));
   lines.push("## Results");
   lines.push("");
   lines.push(markdownTable(cells));

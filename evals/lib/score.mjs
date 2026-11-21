@@ -8,7 +8,7 @@ const BUG_B = "b";
 const BUG_C = "c";
 const BUG_D = "d";
 
-function normalize(text) {
+export function normalize(text) {
   return String(text || "")
     .replace(/\u00a0/g, " ")
     .replace(/[’‘]/g, "'")
@@ -29,7 +29,7 @@ function mentionsDzis(text) {
   );
 }
 
-function mentionsCutoff(text) {
+export function mentionsCutoff(text) {
   return has(
     text,
     /cut\s*off|clipped|clipping|cropped|truncated|cut by|off the (?:bottom|edge|screen|frame|canvas)|hanging off|overflow(?:s|ing)?|off-screen|off the (?:ui|panel)|beyond the (?:bottom|edge|screen)|bottom of the (?:screen|image|frame|ui|panel|display)|obci[eę]t|uciet|ucięt|przyci[eę]t|przesuni[eę]t|wystaje|poza (?:ekran|krawęd|krawed)/,
