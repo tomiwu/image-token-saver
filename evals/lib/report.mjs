@@ -8,6 +8,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { scoreOutput } from "./score.mjs";
+import { writeMethodReports } from "./report-methods.mjs";
 
 function warsawStamp(iso) {
   const date = iso ? new Date(iso) : new Date();
@@ -89,9 +90,12 @@ export function tabulate(rows) {
     const usage = row.response?.tokenUsage || row.tokenUsage;
     const measured = typeof usage?.total === "number" ? usage.total : undefined;
     const score = scoreOutput(output || "");
+    const estimateClaude = Number(vars.estimate_claude);
+    const estimateClaudeRaw = Number(vars.estimate_claude_raw);
     cells.push({
       provider,
       scale,
+      run: vars.run === undefined || vars.run === "" ? "1" : String(vars.run),
       width: vars.width,
       height: vars.height,
       output,
@@ -103,6 +107,14 @@ export function tabulate(rows) {
       reused: row.response?.metadata?.reused === true,
       model: row.response?.metadata?.model,
       sawImage: score.sawImage,
+      inputKind: vars.input_kind || "image",
+      expectBugs: vars.expect_bugs || "",
+      estimateClaude: Number.isFinite(estimateClaude)
+        ? estimateClaude
+        : undefined,
+      estimateClaudeRaw: Number.isFinite(estimateClaudeRaw)
+        ? estimateClaudeRaw
+        : undefined,
     });
   }
   return cells;
@@ -263,8 +275,14 @@ export async function loadUsageRows(outDir) {
     if (!name.endsWith(".json")) continue;
     const data = JSON.parse(await readFile(join(dir, name), "utf8"));
     const usage = data.usageRaw || {};
+    const estimateClaude = Number(data.estimateClaude);
+    const estimateClaudeRaw = Number(data.estimateClaudeRaw);
     rows.push({
       scale: data.scale || name,
+      run:
+        data.run === undefined || data.run === ""
+          ? undefined
+          : String(data.run),
       numTurns: data.numTurns,
       input: usage.input_tokens,
       cacheCreate: usage.cache_creation_input_tokens,
@@ -273,8 +291,12 @@ export async function loadUsageRows(outDir) {
       thinking: usage.output_tokens_details?.thinking_tokens,
       prompt: data.tokenUsage?.prompt,
       total: data.tokenUsage?.total,
-      officialStandard: undefined,
-      officialRaw: RAW_CLAUDE_PATCHES[data.scale],
+      officialStandard: Number.isFinite(estimateClaude)
+        ? estimateClaude
+        : undefined,
+      officialRaw: Number.isFinite(estimateClaudeRaw)
+        ? estimateClaudeRaw
+        : RAW_CLAUDE_PATCHES[data.scale],
     });
   }
   return rows;
@@ -498,6 +520,13 @@ export async function writeReports(resultsPath, outDir, meta = {}) {
   const cells = tabulate(resultRows(data));
   const previousCells = meta.previousCells || (await loadPreviousCells(outDir));
   const usageRows = meta.usageRows || (await loadUsageRows(outDir));
+  if (meta.suite === "methods") {
+    return writeMethodReports(cells, outDir, {
+      ...meta,
+      previousCells,
+      usageRows,
+    });
+  }
   const report = renderReport(cells, { ...meta, previousCells, usageRows });
   const reportPath = join(outDir, "REPORT.md");
   const htmlPath = join(outDir, "results-table.html");

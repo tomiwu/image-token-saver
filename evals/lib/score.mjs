@@ -119,15 +119,22 @@ export function splitItems(text) {
   if (/^\s*none\b/.test(n) && raw.length < 80) {
     return [];
   }
+  if (/^\s*pong\s*$/.test(n)) {
+    return [];
+  }
   const lines = raw
     .split(/\r?\n+/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const numbered = lines.filter((line) =>
-    /^\s*(?:\d+[.)]|[-*•]|[a-d][.)])\s+/.test(line),
+  const decimal = lines.filter((line) => /^\s*\d+[.)]\s+/.test(line));
+  if (decimal.length >= 1) {
+    return decimal;
+  }
+  const bullets = lines.filter((line) =>
+    /^\s*(?:[-*•]|[a-d][.)])\s+/.test(line),
   );
-  if (numbered.length >= 1) {
-    return numbered;
+  if (bullets.length >= 1) {
+    return bullets;
   }
   return [raw];
 }

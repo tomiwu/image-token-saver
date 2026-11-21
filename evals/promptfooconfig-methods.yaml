@@ -1,0 +1,259 @@
+# Method-comparison eval (Claude Code only).
+# Images live under EVALS_IMAGE_DIR and are not in git.
+# Run with: EVALS_SUITE=methods EVALS_PROVIDERS=claude-code npm run eval
+#
+# Do not add this to CI or precommit; it needs the subscription CLI.
+
+description: "buggy-01 methods: crop, diff, greyscale, OCR, and no-image baseline"
+
+prompts:
+  - file://prompt-for-test.cjs
+
+providers:
+  - id: file://providers/cli-provider.mjs
+    label: claude-code
+    config:
+      id: claude-code
+      cli: claude
+
+defaultTest:
+  assert:
+    - type: javascript
+      metric: saw-image
+      value: file://lib/assert-saw-image.cjs
+    - type: javascript
+      metric: bug-a
+      value: file://lib/assert-bug-a.cjs
+    - type: javascript
+      metric: bug-b
+      value: file://lib/assert-bug-b.cjs
+    - type: javascript
+      metric: bug-c
+      value: file://lib/assert-bug-c.cjs
+    - type: javascript
+      metric: bug-d
+      value: file://lib/assert-bug-d.cjs
+    - type: javascript
+      metric: false-positives
+      value: file://lib/assert-false-positives.cjs
+
+evaluateOptions:
+  maxConcurrency: 1
+  repeat: 1
+  cache: false
+
+tests:
+  - description: full size 1872x1404 baseline run 1
+    vars:
+      scale: "full"
+      width: 1872
+      height: 1404
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/full.png"
+      estimate_claude: 1564
+      estimate_claude_raw: 3417
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 1
+  - description: full size 1872x1404 baseline run 2
+    vars:
+      scale: "full"
+      width: 1872
+      height: 1404
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/full.png"
+      estimate_claude: 1564
+      estimate_claude_raw: 3417
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 2
+  - description: scale 0.25 468x351 baseline run 1
+    vars:
+      scale: "0.25"
+      width: 468
+      height: 351
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/scale-0.25.png"
+      estimate_claude: 221
+      estimate_claude_raw: 221
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 1
+  - description: scale 0.25 468x351 baseline run 2
+    vars:
+      scale: "0.25"
+      width: 468
+      height: 351
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/scale-0.25.png"
+      estimate_claude: 221
+      estimate_claude_raw: 221
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 2
+  - description: crop lessons 1136x540 run 1
+    vars:
+      scale: "crop-lessons"
+      width: 1136
+      height: 540
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-lessons.png"
+      estimate_claude: 820
+      estimate_claude_raw: 820
+      input_kind: "image"
+      expect_bugs: "B,C,D"
+      crop_rect: "700,120,1136,540"
+      run: 1
+  - description: crop lessons 1136x540 run 2
+    vars:
+      scale: "crop-lessons"
+      width: 1136
+      height: 540
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-lessons.png"
+      estimate_claude: 820
+      estimate_claude_raw: 820
+      input_kind: "image"
+      expect_bugs: "B,C,D"
+      crop_rect: "700,120,1136,540"
+      run: 2
+  - description: crop Dziś 700x164 run 1
+    vars:
+      scale: "crop-dzis"
+      width: 700
+      height: 164
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-dzis.png"
+      estimate_claude: 150
+      estimate_claude_raw: 150
+      input_kind: "image"
+      expect_bugs: "A"
+      crop_rect: "0,1240,700,164"
+      run: 1
+  - description: crop Dziś 700x164 run 2
+    vars:
+      scale: "crop-dzis"
+      width: 700
+      height: 164
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-dzis.png"
+      estimate_claude: 150
+      estimate_claude_raw: 150
+      input_kind: "image"
+      expect_bugs: "A"
+      crop_rect: "0,1240,700,164"
+      run: 2
+  - description: crop union of all bugs 1808x1284 run 1
+    vars:
+      scale: "crop-union"
+      width: 1808
+      height: 1284
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-union.png"
+      estimate_claude: 1551
+      estimate_claude_raw: 2990
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      crop_rect: "28,120,1808,1284"
+      run: 1
+  - description: crop union of all bugs 1808x1284 run 2
+    vars:
+      scale: "crop-union"
+      width: 1808
+      height: 1284
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-union.png"
+      estimate_claude: 1551
+      estimate_claude_raw: 2990
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      crop_rect: "28,120,1808,1284"
+      run: 2
+  - description: crop payment card 1120x410 run 1
+    vars:
+      scale: "crop-payment"
+      width: 1120
+      height: 410
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-payment.png"
+      estimate_claude: 600
+      estimate_claude_raw: 600
+      input_kind: "image"
+      expect_bugs: "none"
+      crop_rect: "716,930,1120,410"
+      run: 1
+  - description: crop payment card 1120x410 run 2
+    vars:
+      scale: "crop-payment"
+      width: 1120
+      height: 410
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/crop-payment.png"
+      estimate_claude: 600
+      estimate_claude_raw: 600
+      input_kind: "image"
+      expect_bugs: "none"
+      crop_rect: "716,930,1120,410"
+      run: 2
+  - description: diff changed region 1524x1258 run 1
+    vars:
+      scale: "diff"
+      width: 1524
+      height: 1258
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/diff.png"
+      estimate_claude: 1548
+      estimate_claude_raw: 2475
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 1
+  - description: diff changed region 1524x1258 run 2
+    vars:
+      scale: "diff"
+      width: 1524
+      height: 1258
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/diff.png"
+      estimate_claude: 1548
+      estimate_claude_raw: 2475
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 2
+  - description: greyscale full size 1872x1404 run 1
+    vars:
+      scale: "greyscale"
+      width: 1872
+      height: 1404
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/greyscale.png"
+      estimate_claude: 1564
+      estimate_claude_raw: 3417
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 1
+  - description: greyscale full size 1872x1404 run 2
+    vars:
+      scale: "greyscale"
+      width: 1872
+      height: 1404
+      image: "{{env.EVALS_IMAGE_DIR}}/variants/greyscale.png"
+      estimate_claude: 1564
+      estimate_claude_raw: 3417
+      input_kind: "image"
+      expect_bugs: "A,B,C,D"
+      run: 2
+  - description: OCR text only run 1
+    vars:
+      scale: "ocr-text"
+      image: ""
+      ocr_path: "{{env.EVALS_IMAGE_DIR}}/variants/ocr.txt"
+      input_kind: "ocr"
+      expect_bugs: "B,D"
+      run: 1
+  - description: OCR text only run 2
+    vars:
+      scale: "ocr-text"
+      image: ""
+      ocr_path: "{{env.EVALS_IMAGE_DIR}}/variants/ocr.txt"
+      input_kind: "ocr"
+      expect_bugs: "B,D"
+      run: 2
+  - description: no-image text-only baseline run 1
+    vars:
+      scale: "no-image"
+      image: ""
+      input_kind: "none"
+      expect_bugs: "none"
+      run: 1
+  - description: no-image text-only baseline run 2
+    vars:
+      scale: "no-image"
+      image: ""
+      input_kind: "none"
+      expect_bugs: "none"
+      run: 2

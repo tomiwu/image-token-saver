@@ -94,3 +94,19 @@ Scorer unit tests (no subscriptions):
 ```sh
 node --test evals/lib/score.test.mjs
 ```
+
+## Method comparison (crop, diff, greyscale, OCR)
+
+A second suite measures token-saving methods against the full-size and 0.25-scale baselines, with the same improved prompt and the Claude Code provider only. See `evals/variants.md` for rectangles and coverage. See issue #36.
+
+```sh
+export EVALS_IMAGE_DIR=/workspace/image-tokens/evals
+export EVALS_SAMPLE=/workspace/image-tokens/samples/00-start-panel.png
+EVALS_SUITE=methods EVALS_PROVIDERS=claude-code npm run eval
+```
+
+`npm run eval` with `EVALS_SUITE=methods` will build missing variant images first (`evals/prepare-variants.mjs`). That script uses the MVP CLI for crop and diff, sharp for greyscale, and Tesseract (`pol+eng`) for OCR. The images stay under `$EVALS_IMAGE_DIR` and are not committed.
+
+Each method variant is a separate test, and each test has two runs (`run: 1` and `run: 2`) so the report can show noise. The suite writes `$EVALS_IMAGE_DIR/results-methods.json`, then updates `REPORT.md`, `results-table.html`, and `summary.png`.
+
+The Cursor CLI is not used in this suite. Do not set an xAI or Cursor API key.
