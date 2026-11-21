@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import sharp from "sharp";
 import { dirname } from "node:path";
 import {
   FORMULA_SOURCE,
@@ -12,7 +13,9 @@ import type { MethodRequest, MethodResult } from "./method.ts";
 import { cropMethod } from "./crop.ts";
 import { diffMethod } from "./methods/diff.ts";
 import { palette16Method } from "./methods/colour-depth.ts";
-import { resizeMethod, unreducedTokens } from "./resize.ts";
+import { estimateTokens } from "./estimators.ts";
+import type { TargetModel } from "./estimators.ts";
+import { requestedResizeSize } from "./resize.ts";
 
 export interface CliReport {
   formula: string;
@@ -25,26 +28,47 @@ export interface CliReport {
   height?: number;
   out?: string;
   text?: string;
+  saved: string;
+  note?: string;
+}
+
+function savedField(before: number, after: number): string {
+  const tokens = before - after;
+  const percent = before === 0 ? 0 : Math.round((tokens / before) * 100);
+  return `${tokens} (${percent}%)`;
+}
+
+function formulaNote(model: TargetModel): string | undefined {
+  if (model === "gpt-4o") {
+    return "GPT-4o tokens follow 512 px tiles; a shrink does not always change the count";
+  }
+  if (model === "gemini-3") {
+    return "Gemini 3 media_resolution does not change with pixel size";
+  }
+  return undefined;
+}
+
+function optionalField(name: string, value: string | undefined): string[] {
+  return value ? [`${name}=${value}`] : [];
 }
 
 function formatPlain(report: CliReport): string {
-  const parts = [
+  const size =
+    report.width !== undefined && report.height !== undefined
+      ? `${report.width}x${report.height}`
+      : undefined;
+  return [
     `formula=${report.formula}`,
     `model=${report.model}`,
     `method=${report.method}`,
     `tokens_before=${report.tokensBefore}`,
     `tokens_after=${report.tokensAfter}`,
-  ];
-  if (report.width !== undefined && report.height !== undefined) {
-    parts.push(`size=${report.width}x${report.height}`);
-  }
-  if (report.out) {
-    parts.push(`out=${report.out}`);
-  }
-  if (report.text) {
-    parts.push(`text=${report.text}`);
-  }
-  return parts.join(" ");
+    `saved=${report.saved}`,
+    ...optionalField("size", size),
+    ...optionalField("out", report.out),
+    ...optionalField("text", report.text),
+    ...optionalField("note", report.note),
+  ].join(" ");
 }
 
 function formatJson(report: CliReport): string {
@@ -79,25 +103,27 @@ function requireOut(args: CliArgs): string {
   return args.out;
 }
 
-async function unchangedResult(
+async function applyResize(
   request: MethodRequest,
-  method: string,
+  args: CliArgs,
 ): Promise<MethodResult> {
   const info = await readImageInfo(request.image);
-  const image = await loadImageBytes(request.image);
+  const target = requestedResizeSize(info.width, info.height, request.model, {
+    scale: args.scale,
+    maxSide: args.maxSide,
+  });
+  const bytes = await loadImageBytes(request.image);
+  const image = await sharp(bytes)
+    .resize(target.width, target.height, { fit: "fill" })
+    .png()
+    .toBuffer();
   return {
-    method,
+    method: "resize",
     image,
-    width: info.width,
-    height: info.height,
-    estimatedTokens: unreducedTokens(info.width, info.height, request.model),
+    width: target.width,
+    height: target.height,
+    estimatedTokens: estimateTokens(target.width, target.height, request.model),
   };
-}
-
-async function applyResize(request: MethodRequest): Promise<MethodResult> {
-  return (
-    (await resizeMethod.apply(request)) ?? unchangedResult(request, "resize")
-  );
 }
 
 async function applyCrop(request: MethodRequest): Promise<MethodResult> {
@@ -147,35 +173,55 @@ async function applyDiff(request: MethodRequest): Promise<MethodResult> {
   return result;
 }
 
-const APPLY: Record<
-  MethodName,
-  (request: MethodRequest) => Promise<MethodResult>
-> = {
-  resize: applyResize,
-  crop: applyCrop,
-  palette: applyPalette,
-  mask: applyMask,
-  diff: applyDiff,
-};
+async function applyNamed(
+  args: CliArgs,
+  request: MethodRequest,
+): Promise<MethodResult> {
+  if (args.method === "resize") {
+    return applyResize(request, args);
+  }
+  if (args.method === "crop") {
+    return applyCrop(request);
+  }
+  if (args.method === "palette") {
+    return applyPalette(request);
+  }
+  if (args.method === "mask") {
+    return applyMask(request);
+  }
+  return applyDiff(request);
+}
 
 async function writeOutput(path: string, image: Uint8Array): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, image);
 }
 
-async function runEstimate(args: CliArgs): Promise<CliReport> {
-  const info = await readImageInfo(args.input);
-  const tokens = unreducedTokens(info.width, info.height, args.model);
+function baseReport(
+  args: CliArgs,
+  method: string,
+  tokensBefore: number,
+  tokensAfter: number,
+  size: { width: number; height: number },
+): Omit<CliReport, "out" | "text"> {
   return {
     formula: FORMULA_SOURCE[args.model],
     model: args.modelAlias,
     modelId: args.model,
-    method: "none",
-    tokensBefore: tokens,
-    tokensAfter: tokens,
-    width: info.width,
-    height: info.height,
+    method,
+    tokensBefore,
+    tokensAfter,
+    width: size.width,
+    height: size.height,
+    saved: savedField(tokensBefore, tokensAfter),
+    note: formulaNote(args.model),
   };
+}
+
+async function runEstimate(args: CliArgs): Promise<CliReport> {
+  const info = await readImageInfo(args.input);
+  const tokens = estimateTokens(info.width, info.height, args.model);
+  return baseReport(args, "none", tokens, tokens, info);
 }
 
 function assertRectIfNeeded(args: CliArgs): void {
@@ -197,17 +243,16 @@ function toReport(
   result: MethodResult,
   out: string,
 ): CliReport {
-  const wroteImage = Boolean(result.image);
-  return {
-    formula: FORMULA_SOURCE[args.model],
-    model: args.modelAlias,
-    modelId: args.model,
-    method: result.method,
+  const report = baseReport(
+    args,
+    result.method,
     tokensBefore,
-    tokensAfter: result.estimatedTokens,
-    width: result.width ?? info.width,
-    height: result.height ?? info.height,
-    out: wroteImage ? out : undefined,
+    result.estimatedTokens,
+    { width: result.width ?? info.width, height: result.height ?? info.height },
+  );
+  return {
+    ...report,
+    out: result.image ? out : undefined,
     text: result.text,
   };
 }
@@ -217,14 +262,14 @@ async function runReduce(args: CliArgs): Promise<CliReport> {
   assertRectIfNeeded(args);
   assertPrevIfNeeded(args);
   const info = await readImageInfo(args.input);
-  const tokensBefore = unreducedTokens(info.width, info.height, args.model);
+  const tokensBefore = estimateTokens(info.width, info.height, args.model);
   const request: MethodRequest = {
     image: args.input,
     model: args.model,
     region: args.rect,
     previous: args.prev,
   };
-  const result = await APPLY[args.method](request);
+  const result = await applyNamed(args, request);
   if (result.image) {
     await writeOutput(out, result.image);
   }

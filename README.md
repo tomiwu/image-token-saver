@@ -26,12 +26,16 @@ npm install
 
 ```sh
 image-token-saver estimate <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--json]
-image-token-saver reduce <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--method resize|crop|palette|mask|diff] [--rect x,y,w,h] [--prev <file>] --out <file> [--json]
+image-token-saver reduce <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--method resize|crop|palette|mask|diff] [--scale <0..1>] [--max-side <px>] [--rect x,y,w,h] [--prev <file>] --out <file> [--json]
 ```
 
 The short model names map to the library models: `claude` is `claude-standard`, `gemini` is `gemini-3`. The default method for `reduce` is `resize`. The `crop` and `mask` methods need `--rect x,y,w,h`. The `diff` method needs `--prev <file>`.
 
-Each run prints the official formula that produced the estimate, and the token counts before and after. Add `--json` for a JSON object.
+`tokens_before` is the official charge after the vendor's own auto-resize, not the raw pixel count. Claude standard downscales a large image itself, so a raw 1872×1404 frame costs 1564 tokens, not 3417.
+
+The default `resize` writes half of the vendor's own target size, so the official formula can record a real saving when the formula depends on size. Use `--scale <0..1>` to scale the original image (0.5 is a 2× downscale). Use `--max-side <px>` to cap the long edge. If you set both, the CLI applies `--scale` first, then the cap.
+
+Each run prints the official formula, the token counts before and after, and `saved=` in tokens and percent. For GPT-4o, tokens follow 512 px tiles, so a shrink does not always change the count. For Gemini 3, `media_resolution` does not change with pixel size. Add `--json` for a JSON object.
 
 Run the local checks before each commit:
 
@@ -49,16 +53,16 @@ Estimate the official tokens for Claude:
 node src/cli.ts estimate ./photo.png --model claude
 ```
 
-Resize the image to the official Claude processed size and write the result:
+Resize the image with the default (half of the vendor target size) and write the result:
 
 ```sh
 node src/cli.ts reduce ./photo.png --model claude --method resize --out ./photo.claude.png
 ```
 
-Apply a 16-colour palette for Gemini and print JSON:
+Downscale to half of the original size (the 2× path in the formula baseline):
 
 ```sh
-node src/cli.ts reduce ./photo.png --model gemini --method palette --out ./photo.palette.png --json
+node src/cli.ts reduce ./photo.png --model gpt-5.2 --method resize --scale 0.5 --out ./photo.gpt52.png
 ```
 
 ## Sample renders

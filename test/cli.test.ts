@@ -79,6 +79,37 @@ test("parseArgs rejects a missing or unknown command", () => {
   );
 });
 
+test("parseArgs reads --scale and --max-side", () => {
+  const args = parseArgs([
+    "reduce",
+    "in.png",
+    "--model",
+    "claude",
+    "--scale",
+    "0.5",
+    "--max-side",
+    "800",
+    "--out",
+    "out.png",
+  ]);
+  assert.equal(args.scale, 0.5);
+  assert.equal(args.maxSide, 800);
+  assert.throws(
+    () =>
+      parseArgs([
+        "reduce",
+        "in.png",
+        "--model",
+        "claude",
+        "--scale",
+        "0",
+        "--out",
+        "out.png",
+      ]),
+    CliError,
+  );
+});
+
 test("estimate prints official formula tokens for Claude", async () => {
   const dir = await mkdtemp(join(tmpdir(), "its-cli-"));
   const input = await writePng(dir, "in.png", 1872, 1404);
@@ -87,8 +118,9 @@ test("estimate prints official formula tokens for Claude", async () => {
   assert.match(result.stdout, /formula=official Anthropic formula/);
   assert.match(result.stdout, /model=claude/);
   assert.match(result.stdout, /method=none/);
-  assert.match(result.stdout, /tokens_before=3417/);
-  assert.match(result.stdout, /tokens_after=3417/);
+  assert.match(result.stdout, /tokens_before=1564/);
+  assert.match(result.stdout, /tokens_after=1564/);
+  assert.match(result.stdout, /saved=0 \(0%\)/);
   assert.match(result.stdout, /size=1872x1404/);
 });
 
@@ -109,28 +141,85 @@ test("estimate --json names the formula and the counts", async () => {
   assert.equal(body.modelId, "gpt-4o");
   assert.equal(body.tokensBefore, 765);
   assert.equal(body.tokensAfter, 765);
+  assert.equal(body.saved, "0 (0%)");
+  assert.match(String(body.note), /512 px tiles/);
 });
 
-test("reduce --method resize writes a smaller Claude image", async () => {
+test("estimate reports the official GPT-5.2 charge for 1872x1404", async () => {
   const dir = await mkdtemp(join(tmpdir(), "its-cli-"));
   const input = await writePng(dir, "in.png", 1872, 1404);
-  const out = join(dir, "out.png");
-  const result = await spawnCli([
+  const result = await spawnCli(["estimate", input, "--model", "gpt-5.2"]);
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /tokens_before=3116/);
+  assert.match(result.stdout, /tokens_after=3116/);
+});
+
+test("default resize is half of the vendor target size", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "its-cli-"));
+  const input = await writePng(dir, "in.png", 1872, 1404);
+  const claudeOut = join(dir, "claude.png");
+  const claude = await spawnCli([
     "reduce",
     input,
     "--model",
     "claude",
     "--out",
-    out,
+    claudeOut,
   ]);
-  assert.equal(result.code, 0, result.stderr);
-  assert.match(result.stdout, /formula=official Anthropic formula/);
-  assert.match(result.stdout, /tokens_before=3417/);
-  assert.match(result.stdout, /tokens_after=1564/);
-  assert.match(result.stdout, /method=resize/);
-  assert.match(result.stdout, /size=1270x952/);
-  const meta = await sharp(out).metadata();
-  assert.deepEqual([meta.width, meta.height], [1270, 952]);
+  assert.equal(claude.code, 0, claude.stderr);
+  assert.match(claude.stdout, /tokens_before=1564/);
+  assert.match(claude.stdout, /tokens_after=391/);
+  assert.match(claude.stdout, /saved=1173 \(75%\)/);
+  assert.match(claude.stdout, /method=resize/);
+  assert.match(claude.stdout, /size=635x476/);
+  const claudeMeta = await sharp(claudeOut).metadata();
+  assert.deepEqual([claudeMeta.width, claudeMeta.height], [635, 476]);
+  const gptOut = join(dir, "gpt.png");
+  const gpt = await spawnCli([
+    "reduce",
+    input,
+    "--model",
+    "gpt-5.2",
+    "--out",
+    gptOut,
+  ]);
+  assert.equal(gpt.code, 0, gpt.stderr);
+  assert.match(gpt.stdout, /tokens_before=3116/);
+  assert.match(gpt.stdout, /tokens_after=792/);
+  assert.match(gpt.stdout, /size=936x702/);
+});
+
+test("reduce --scale 0.5 matches the 936x702 baseline counts", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "its-cli-"));
+  const input = await writePng(dir, "in.png", 1872, 1404);
+  const claude = await spawnCli([
+    "reduce",
+    input,
+    "--model",
+    "claude",
+    "--scale",
+    "0.5",
+    "--out",
+    join(dir, "claude.png"),
+  ]);
+  assert.equal(claude.code, 0, claude.stderr);
+  assert.match(claude.stdout, /tokens_before=1564/);
+  assert.match(claude.stdout, /tokens_after=884/);
+  assert.match(claude.stdout, /size=936x702/);
+  const gpt = await spawnCli([
+    "reduce",
+    input,
+    "--model",
+    "gpt-5.2",
+    "--scale",
+    "0.5",
+    "--out",
+    join(dir, "gpt.png"),
+  ]);
+  assert.equal(gpt.code, 0, gpt.stderr);
+  assert.match(gpt.stdout, /tokens_before=3116/);
+  assert.match(gpt.stdout, /tokens_after=792/);
+  assert.match(gpt.stdout, /size=936x702/);
 });
 
 test("reduce --method crop needs --rect and writes the rectangle", async () => {

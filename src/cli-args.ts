@@ -21,6 +21,8 @@ export interface CliArgs {
   prev?: string;
   out?: string;
   json: boolean;
+  scale?: number;
+  maxSide?: number;
 }
 
 const MODEL_ALIAS: Record<string, TargetModel> = {
@@ -55,8 +57,9 @@ export const FORMULA_SOURCE: Record<TargetModel, string> = {
 export function usage(): string {
   return [
     "Usage:",
-    "  image-token-saver reduce <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--method resize|crop|palette|mask|diff] [--rect x,y,w,h] [--prev <file>] --out <file> [--json]",
+    "  image-token-saver reduce <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--method resize|crop|palette|mask|diff] [--scale <0..1>] [--max-side <px>] [--rect x,y,w,h] [--prev <file>] --out <file> [--json]",
     "  image-token-saver estimate <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--json]",
+    "  Default resize is 0.5 of the vendor's own target size. --scale is a fraction of the original size.",
   ].join("\n");
 }
 
@@ -89,6 +92,24 @@ export function parseRect(value: string): CropRect {
     throw new CliError("Each --rect value must be an integer.");
   }
   return { x, y, width, height };
+}
+
+export function parseScale(value: string): number {
+  const scale = Number(value);
+  if (!Number.isFinite(scale) || scale <= 0 || scale > 1) {
+    throw new CliError(
+      "The --scale value must be greater than 0 and at most 1.",
+    );
+  }
+  return scale;
+}
+
+export function parseMaxSide(value: string): number {
+  const maxSide = Number(value);
+  if (!Number.isInteger(maxSide) || maxSide < 1) {
+    throw new CliError("The --max-side value must be a positive integer.");
+  }
+  return maxSide;
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -125,6 +146,14 @@ function setJson(args: PartialArgs): void {
   args.json = true;
 }
 
+function setScale(args: PartialArgs, value: string): void {
+  args.scale = parseScale(value);
+}
+
+function setMaxSide(args: PartialArgs, value: string): void {
+  args.maxSide = parseMaxSide(value);
+}
+
 const VALUE_FLAGS: Record<string, (args: PartialArgs, value: string) => void> =
   {
     "--model": setModel,
@@ -132,6 +161,8 @@ const VALUE_FLAGS: Record<string, (args: PartialArgs, value: string) => void> =
     "--rect": setRect,
     "--prev": setPrev,
     "--out": setOut,
+    "--scale": setScale,
+    "--max-side": setMaxSide,
   };
 
 function applyFlag(args: PartialArgs, tokens: string[], index: number): number {
@@ -195,6 +226,8 @@ function finishArgs(args: PartialArgs): CliArgs {
     prev: args.prev,
     out: args.out,
     json: Boolean(args.json),
+    scale: args.scale,
+    maxSide: args.maxSide,
   };
 }
 
