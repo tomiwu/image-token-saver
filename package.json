@@ -3,13 +3,30 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.22.3"
+    "node": "24.22.3"
   },
   "scripts": {
-    "sandcastle": "npx tsx .sandcastle/main.mts"
+    "sandcastle": "npx tsx .sandcastle/main.mts",
+    "format": "prettier --check .",
+    "lint": "eslint .",
+    "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
+    "test": "node --test test/*.test.ts",
+    "crap": "node scripts/crap.ts"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "0.12.0",
-    "tsx": "^4.21.0"
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "eslint": "10.15.0",
+    "prettier": "3.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "sharp": "0.35.5",
+    "zod": "4.6.7"
   }
 }
