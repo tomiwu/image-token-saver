@@ -3,13 +3,6 @@ import { estimateTokens } from "./estimators.ts";
 import { loadImageBytes } from "./image-io.ts";
 import type { MethodResult, ReductionMethod } from "./method.ts";
 
-/**
- * Official token formulas use the full width and height of the image.
- * This method keeps the canvas size unless the caller sets `resizeTo`.
- * It improves focus at a given size. It does not cut formula tokens
- * on its own. Combine it with a resize or a crop to cut tokens.
- */
-
 export interface FocusRegion {
   left: number;
   top: number;
