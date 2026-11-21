@@ -75,3 +75,13 @@ Local sample renders are not committed. The `.gitignore` file ignores the local 
 - `docs/overview.md`: project overview.
 - `GLOSSARY.md`: terms.
 - `CLAUDE.md`: rules for coding agents.
+
+## Video command
+
+`image-token-saver video <file.mp4|file.mov|folder> [--events <log.json>] [--out-dir <dir>] [--fps <n>] [--json]`
+
+The command needs ffmpeg 7 on PATH for video files. It writes each frame as a PNG and lists the frames with timestamps.
+
+- **Video file:** the timestamp is the media timestamp (`pts_time`) in seconds.
+- **Folder:** the command sorts image file names in natural order (`frame2` before `frame10`). The timestamp is the sequence index divided by `--fps`. The default is 1 frame per second.
+- **Event log:** a JSON array such as `[{"time": 0.5, "rect": {"x": 0, "y": 0, "width": 10, "height": 10}}]`. `time` is in seconds. `rect` is optional. The command parses the log as a hint only.
