@@ -1,0 +1,135 @@
+# Image-token-saver bug-finding eval.
+# Set EVALS_IMAGE_DIR to the directory that holds the (uncommitted)
+# buggy image and its scaled copies. See evals/README.md.
+#
+# Run with: npm run eval
+# Do not add this to CI or precommit; it needs subscription CLIs.
+
+description: "buggy-01 screenshot bugs across models and scales"
+
+prompts:
+  - file://prompt.txt
+
+providers:
+  - id: file://providers/cli-provider.mjs
+    label: claude-code
+    config:
+      id: claude-code
+      cli: claude
+  - id: file://providers/cli-provider.mjs
+    label: grok-4.7-high
+    config:
+      id: grok-4.7-high
+      cli: agent
+      model: grok-4.7-high
+  - id: file://providers/cli-provider.mjs
+    label: gpt-5.2
+    config:
+      id: gpt-5.2
+      cli: agent
+      model: gpt-5.2
+  - id: file://providers/cli-provider.mjs
+    label: gemini-3.1-pro
+    config:
+      id: gemini-3.1-pro
+      cli: agent
+      model: gemini-3.1-pro
+  - id: file://providers/cli-provider.mjs
+    label: composer-2.5
+    config:
+      id: composer-2.5
+      cli: agent
+      model: composer-2.5
+
+defaultTest:
+  assert:
+    - type: javascript
+      metric: saw-image
+      value: file://lib/assert-saw-image.cjs
+    - type: javascript
+      metric: bug-a
+      value: file://lib/assert-bug-a.cjs
+    - type: javascript
+      metric: bug-b
+      value: file://lib/assert-bug-b.cjs
+    - type: javascript
+      metric: bug-c
+      value: file://lib/assert-bug-c.cjs
+    - type: javascript
+      metric: bug-d
+      value: file://lib/assert-bug-d.cjs
+    - type: javascript
+      metric: false-positives
+      value: file://lib/assert-false-positives.cjs
+    # Optional second grader. Off by default: it would spend extra
+    # subscription calls. Enable with EVALS_LLM_RUBRIC=1 (see run.mjs).
+    # - type: llm-rubric
+    #   metric: llm-rubric
+    #   value: "The answer finds the four seeded bugs in the answer key and does not invent others."
+
+evaluateOptions:
+  maxConcurrency: 1
+  repeat: 1
+  cache: false
+
+tests:
+  - description: full size 1872x1404
+    vars:
+      scale: full
+      width: 1872
+      height: 1404
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/full.png"
+      estimate_claude: 1564
+      estimate_gpt4o: 765
+      estimate_gpt52: 3116
+      estimate_gemini: 1120
+  - description: scale 0.75 1404x1053
+    vars:
+      scale: "0.75"
+      width: 1404
+      height: 1053
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/scale-0.75.png"
+      estimate_claude: 1564
+      estimate_gpt4o: 765
+      estimate_gpt52: 1743
+      estimate_gemini: 1120
+  - description: scale 0.5 936x702
+    vars:
+      scale: "0.5"
+      width: 936
+      height: 702
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/scale-0.5.png"
+      estimate_claude: 884
+      estimate_gpt4o: 765
+      estimate_gpt52: 792
+      estimate_gemini: 1120
+  - description: scale 0.34 636x477
+    vars:
+      scale: "0.34"
+      width: 636
+      height: 477
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/scale-0.34.png"
+      estimate_claude: 414
+      estimate_gpt4o: 425
+      estimate_gpt52: 360
+      estimate_gemini: 1120
+  - description: scale 0.25 468x351
+    vars:
+      scale: "0.25"
+      width: 468
+      height: 351
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/scale-0.25.png"
+      estimate_claude: 221
+      estimate_gpt4o: 255
+      estimate_gpt52: 198
+      estimate_gemini: 1120
+  - description: max-side 512 512x384
+    vars:
+      scale: max-side-512
+      width: 512
+      height: 384
+      image: "{{env.EVALS_IMAGE_DIR}}/scales/max-side-512.png"
+      estimate_claude: 266
+      estimate_gpt4o: 255
+      estimate_gpt52: 231
+      estimate_gemini: 1120

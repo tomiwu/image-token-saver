@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "node node_modules/@typescript/native/bin/tsc --noEmit",
     "test": "node --test test/*.test.ts",
-    "crap": "node scripts/crap.ts"
+    "crap": "node scripts/crap.ts",
+    "eval": "node evals/run.mjs"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "0.12.0",
@@ -25,8 +26,9 @@
     "typescript-eslint": "8.73.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.2",
-    "sharp": "0.35.5",
-    "zod": "4.6.7"
+    "sharp": "0.35.5"
+  },
+  "bin": {
+    "image-token-saver": "src/cli.ts"
   }
 }
