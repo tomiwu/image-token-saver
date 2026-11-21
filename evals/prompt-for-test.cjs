@@ -55,16 +55,20 @@ function readOcrText(vars) {
   return "";
 }
 
+function withImagePath(text, vars) {
+  return text.replaceAll("{{image}}", vars?.image || "");
+}
+
 function imagePrompt(vars) {
   const inline = vars?.delivery === "inline";
   if (vars?.prompt_kind === "layout") {
-    const tail = inline ? INLINE_LINE : `Screenshot file: ${vars?.image || ""}`;
-    return `${LAYOUT_PROMPT}${tail}\n`;
+    const tail = inline ? INLINE_LINE : FILE_LINE;
+    return withImagePath(`${LAYOUT_PROMPT}${tail}\n`, vars);
   }
   const body = inline
     ? IMAGE_PROMPT.replace(FILE_LINE, INLINE_LINE)
     : IMAGE_PROMPT;
-  return body.replaceAll("{{image}}", vars?.image || "");
+  return withImagePath(body, vars);
 }
 
 module.exports = async ({ vars } = {}) => {

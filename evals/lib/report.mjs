@@ -346,10 +346,15 @@ function usageMarkdown(rows) {
   return `${fixed.join("\n")}\n`;
 }
 
-function mean(values) {
+function roundedMean(values) {
   const nums = values.filter((v) => typeof v === "number");
   if (!nums.length) return undefined;
   return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
+}
+
+function meanToHundredths(values) {
+  const scaled = roundedMean(values.map((value) => value * 100));
+  return (scaled ?? 0) / 100;
 }
 
 function groupLabel(group) {
@@ -358,7 +363,7 @@ function groupLabel(group) {
 }
 
 function groupTokens(group) {
-  const value = mean(group.cells.map((c) => c.measuredPrompt));
+  const value = roundedMean(group.cells.map((c) => c.measuredPrompt));
   return value === undefined ? "no measured usage" : `${value} measured`;
 }
 
@@ -384,11 +389,11 @@ export function passRateMarkdown(cells, meta = {}) {
     "| --- | --- | --- | --- | --- | --- | --- |",
   );
   for (const group of groupByCase(cells)) {
-    const found = mean(group.cells.map((c) => c.score.foundCount * 100));
-    const fp = mean(group.cells.map((c) => c.score.falsePositives * 100));
+    const found = meanToHundredths(group.cells.map((c) => c.score.foundCount));
+    const fp = meanToHundredths(group.cells.map((c) => c.score.falsePositives));
     const total = group.cells[0].score.total;
     lines.push(
-      `| ${group.provider} | ${groupModels(group)} | ${groupLabel(group)} | ${group.rate.text} passed | ${(found ?? 0) / 100} of ${total} | ${(fp ?? 0) / 100} | ${groupTokens(group)} |`,
+      `| ${group.provider} | ${groupModels(group)} | ${groupLabel(group)} | ${group.rate.text} passed | ${found} of ${total} | ${fp} | ${groupTokens(group)} |`,
     );
   }
   lines.push("");
@@ -396,11 +401,14 @@ export function passRateMarkdown(cells, meta = {}) {
 }
 
 export function baselineMarkdown(cells) {
-  const pick = (scale) =>
-    cells.filter((c) => c.caseId === "buggy-01" && c.scale === scale);
-  const mp = (scale) => mean(pick(scale).map((c) => c.measuredPrompt));
-  const baseline = mp("full-no-tool");
-  const withTool = mp("full");
+  const meanPromptTokens = (scale) =>
+    roundedMean(
+      cells
+        .filter((c) => c.caseId === "buggy-01" && c.scale === scale)
+        .map((c) => c.measuredPrompt),
+    );
+  const baseline = meanPromptTokens("full-no-tool");
+  const withTool = meanPromptTokens("full");
   const lines = ["## Full-size no-tool baseline", ""];
   if (baseline === undefined) {
     lines.push("The baseline row has no measured usage in this run.", "");

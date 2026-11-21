@@ -51,15 +51,19 @@ const LAYOUT_BUGS = {
 export const CASES = {
   "buggy-01": { total: 4 },
   clean: { total: 0 },
-  "layout-form": { total: 3 },
-  "layout-table": { total: 3 },
-  "layout-chat": { total: 3 },
+  "layout-form": { total: LAYOUT_BUGS["layout-form"].length },
+  "layout-table": { total: LAYOUT_BUGS["layout-table"].length },
+  "layout-chat": { total: LAYOUT_BUGS["layout-chat"].length },
 };
 
-export function caseTotal(caseId) {
+function assertKnownCase(caseId) {
   if (!CASES[caseId]) {
     throw new Error(`Unknown case ${caseId}`);
   }
+}
+
+export function caseTotal(caseId) {
+  assertKnownCase(caseId);
   return CASES[caseId].total;
 }
 
@@ -77,11 +81,15 @@ function scoreNegative(text) {
 
 function scoreLayout(caseId, text) {
   const bugs = LAYOUT_BUGS[caseId];
-  const hits = (item) => bugs.filter((bug) => bug.test(normalize(item)));
+  const normalizedText = normalize(text);
   const found = Object.fromEntries(
-    bugs.map((bug) => [bug.id, bug.test(normalize(text))]),
+    bugs.map((bug) => [bug.id, bug.test(normalizedText)]),
   );
-  const unmatched = splitItems(text).filter((item) => hits(item).length === 0);
+  const matchesNoBug = (item) => {
+    const normalizedItem = normalize(item);
+    return !bugs.some((bug) => bug.test(normalizedItem));
+  };
+  const unmatched = splitItems(text).filter(matchesNoBug);
   return {
     found,
     foundCount: Object.values(found).filter(Boolean).length,
@@ -93,7 +101,7 @@ function scoreLayout(caseId, text) {
 }
 
 export function scoreCase(caseId, text) {
-  caseTotal(caseId);
+  assertKnownCase(caseId);
   if (caseId === "buggy-01") {
     return scoreOutput(text);
   }
