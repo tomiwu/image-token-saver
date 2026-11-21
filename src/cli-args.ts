@@ -114,7 +114,7 @@ export function parseMaxSide(value: string): number {
   return maxSide;
 }
 
-function requireValue(flag: string, value: string | undefined): string {
+export function requireValue(flag: string, value: string | undefined): string {
   if (value === undefined || value.startsWith("--")) {
     throw new CliError(`The flag ${flag} needs a value.`);
   }

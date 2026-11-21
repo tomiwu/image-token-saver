@@ -57,7 +57,7 @@ export async function readVideoFrames(
   ]);
   const timestamps = parseTimestamps(log);
   const names = (await readdir(outDir))
-    .filter((n) => n.endsWith(".png"))
+    .filter((name) => name.endsWith(".png"))
     .sort();
   if (names.length === 0 || names.length !== timestamps.length) {
     throw new VideoInputError("ffmpeg returned no usable frames.");

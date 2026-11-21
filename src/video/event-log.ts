@@ -20,25 +20,33 @@ function isWholeNumber(value: unknown, minimum: number): value is number {
   );
 }
 
-const RECT_MINIMUM = { x: 0, y: 0, width: 1, height: 1 };
-
 function rectMessage(position: number): string {
   return `Event ${position}: "rect" needs integer x, y, width, height. Width and height must be 1 or more.`;
+}
+
+function readRectField(
+  value: Record<string, unknown>,
+  key: keyof CropRect,
+  minimum: number,
+  position: number,
+): number {
+  const field = value[key];
+  if (!isWholeNumber(field, minimum)) {
+    throw new VideoInputError(rectMessage(position));
+  }
+  return field;
 }
 
 function parseRect(value: unknown, position: number): CropRect {
   if (!isRecord(value)) {
     throw new VideoInputError(rectMessage(position));
   }
-  const rect: Record<string, number> = {};
-  for (const [key, minimum] of Object.entries(RECT_MINIMUM)) {
-    const field = value[key];
-    if (!isWholeNumber(field, minimum)) {
-      throw new VideoInputError(rectMessage(position));
-    }
-    rect[key] = field;
-  }
-  return rect as unknown as CropRect;
+  return {
+    x: readRectField(value, "x", 0, position),
+    y: readRectField(value, "y", 0, position),
+    width: readRectField(value, "width", 1, position),
+    height: readRectField(value, "height", 1, position),
+  };
 }
 
 function parseEvent(value: unknown, position: number): VideoEvent {

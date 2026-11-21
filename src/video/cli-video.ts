@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
-import { CliError } from "../cli-args.ts";
+import { CliError, requireValue } from "../cli-args.ts";
 import { parseEventLog } from "./event-log.ts";
 import { readVideoFrames } from "./ffmpeg.ts";
 import { readFolderFrames } from "./folder.ts";
@@ -29,28 +29,34 @@ function parseFps(value: string): number {
   return fps;
 }
 
-function requireValue(flag: string, value: string | undefined): string {
-  if (value === undefined || value.startsWith("--")) {
-    throw new CliError(`The flag ${flag} needs a value.`);
-  }
-  return value;
+type PartialVideoArgs = Partial<VideoArgs> & { positionals: string[] };
+
+function setEvents(args: PartialVideoArgs, value: string): void {
+  args.events = value;
 }
 
-type Partial_ = Partial<VideoArgs> & { positionals: string[] };
+function setOutDir(args: PartialVideoArgs, value: string): void {
+  args.outDir = value;
+}
 
-const VALUE_FLAGS: Record<string, (args: Partial_, value: string) => void> = {
-  "--events": (args, value) => {
-    args.events = value;
-  },
-  "--out-dir": (args, value) => {
-    args.outDir = value;
-  },
-  "--fps": (args, value) => {
-    args.fps = parseFps(value);
-  },
+function setFps(args: PartialVideoArgs, value: string): void {
+  args.fps = parseFps(value);
+}
+
+const VALUE_FLAGS: Record<
+  string,
+  (args: PartialVideoArgs, value: string) => void
+> = {
+  "--events": setEvents,
+  "--out-dir": setOutDir,
+  "--fps": setFps,
 };
 
-function applyFlag(args: Partial_, tokens: string[], index: number): number {
+function applyFlag(
+  args: PartialVideoArgs,
+  tokens: string[],
+  index: number,
+): number {
   const flag = tokens[index];
   if (flag === "--json") {
     args.json = true;
@@ -65,13 +71,14 @@ function applyFlag(args: Partial_, tokens: string[], index: number): number {
 }
 
 export function parseVideoArgs(argv: string[]): VideoArgs {
-  const args: Partial_ = { positionals: [] };
+  const args: PartialVideoArgs = { positionals: [] };
   let index = 0;
   while (index < argv.length) {
-    if (argv[index].startsWith("--")) {
+    const token = argv[index];
+    if (token.startsWith("--")) {
       index = applyFlag(args, argv, index);
     } else {
-      args.positionals.push(argv[index]);
+      args.positionals.push(token);
       index += 1;
     }
   }

@@ -55,13 +55,7 @@ jobs:
           node-version: "24.22.3"
           cache: npm
       - run: npm ci
-      - name: Install pinned ffmpeg 7.0.2
-        run: |
-          mkdir -p "$RUNNER_TEMP/ffmpeg"
-          npm install --prefix "$RUNNER_TEMP/ffmpeg" ffmpeg-static@5.3.0
-          mkdir -p "$RUNNER_TEMP/ffmpeg-bin"
-          ln -s "$RUNNER_TEMP/ffmpeg/node_modules/ffmpeg-static/ffmpeg" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
-          echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/setup-ffmpeg
       - run: ffmpeg -version
       - run: npm run test
 
@@ -75,12 +69,4 @@ jobs:
           node-version: "24.22.3"
           cache: npm
       - run: npm ci
-      - name: Install pinned ffmpeg 7.0.2
-        run: |
-          mkdir -p "$RUNNER_TEMP/ffmpeg"
-          npm install --prefix "$RUNNER_TEMP/ffmpeg" ffmpeg-static@5.3.0
-          mkdir -p "$RUNNER_TEMP/ffmpeg-bin"
-          ln -s "$RUNNER_TEMP/ffmpeg/node_modules/ffmpeg-static/ffmpeg" "$RUNNER_TEMP/ffmpeg-bin/ffmpeg"
-          echo "$RUNNER_TEMP/ffmpeg-bin" >> "$GITHUB_PATH"
-      - run: ffmpeg -version
       - run: npm run crap

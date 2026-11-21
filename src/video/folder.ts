@@ -4,11 +4,11 @@ import { VideoInputError, type FrameSet } from "./types.ts";
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
-export function isImageName(name: string): boolean {
+function isImageName(name: string): boolean {
   return IMAGE_EXTENSIONS.has(extname(name).toLowerCase());
 }
 
-export function compareNames(a: string, b: string): number {
+function compareNames(a: string, b: string): number {
   return a.localeCompare(b, "en", { numeric: true });
 }
 
