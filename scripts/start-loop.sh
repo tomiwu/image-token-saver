@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Start the image-token-saver Sandcastle loop once. Safe to call many times at the same moment.
-# Box operators can also use /workspace/bin/image-token-saver-start-loop.sh (fixed log path).
 set -euo pipefail
 umask 077
 NAME=image-token-saver

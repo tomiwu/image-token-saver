@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Run format, lint, typecheck, tests, and the CRAP gate. Fail if a tool is not wired yet.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
