@@ -23,8 +23,33 @@ function scaleName(context) {
   return context?.vars?.scale || "unknown";
 }
 
+function runName(context) {
+  const value = context?.vars?.run;
+  if (value === undefined || value === null || value === "") {
+    return "1";
+  }
+  return String(value);
+}
+
+function inputKind(context) {
+  return context?.vars?.input_kind || "image";
+}
+
+function imagePath(context) {
+  const value = context?.vars?.image;
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function cachePath(providerId, context) {
-  const safe = `${providerId}__${scaleName(context)}`.replace(/[^\w.-]+/g, "_");
+  const safe =
+    `${providerId}__${scaleName(context)}__r${runName(context)}`.replace(
+      /[^\w.-]+/g,
+      "_",
+    );
   return join(rawDir(), `${safe}.json`);
 }
 
@@ -210,48 +235,63 @@ function runCommand(command, args, { timeoutMs, cwd } = {}) {
   });
 }
 
+function maybeImageArgs(image) {
+  if (!image) {
+    return [];
+  }
+  return ["--add-dir", dirname(image)];
+}
+
+function buildClaudeArgs(config, prompt, image) {
+  const args = [
+    "-p",
+    prompt,
+    "--output-format",
+    "json",
+    "--permission-mode",
+    "dontAsk",
+    "--permission-prompts",
+    "none",
+    // Keep the Read tool on every call so the no-image baseline
+    // uses the same tool schema as the image calls.
+    "--tools",
+    "Read",
+    ...maybeImageArgs(image),
+  ];
+  if (config.model) {
+    args.push("--model", config.model);
+  }
+  return { command: "claude", args };
+}
+
+function buildAgentArgs(config, prompt, image) {
+  if (!config.model) {
+    throw new Error("agent provider requires config.model");
+  }
+  return {
+    command: "agent",
+    args: [
+      "-p",
+      prompt,
+      "--model",
+      config.model,
+      "--mode",
+      "ask",
+      "--trust",
+      "--output-format",
+      "json",
+      ...maybeImageArgs(image),
+    ],
+  };
+}
+
 function buildArgs(config, prompt, image) {
   const cli = config.cli;
   if (cli === "claude") {
-    const args = [
-      "-p",
-      prompt,
-      "--output-format",
-      "json",
-      "--tools",
-      "Read",
-      "--permission-mode",
-      "dontAsk",
-      "--permission-prompts",
-      "none",
-      "--add-dir",
-      dirname(image),
-    ];
-    if (config.model) {
-      args.push("--model", config.model);
-    }
-    return { command: "claude", args };
+    return buildClaudeArgs(config, prompt, image);
   }
   if (cli === "agent") {
-    if (!config.model) {
-      throw new Error("agent provider requires config.model");
-    }
-    return {
-      command: "agent",
-      args: [
-        "-p",
-        prompt,
-        "--model",
-        config.model,
-        "--mode",
-        "ask",
-        "--trust",
-        "--output-format",
-        "json",
-        "--add-dir",
-        dirname(image),
-      ],
-    };
+    return buildAgentArgs(config, prompt, image);
   }
   throw new Error(`Unknown cli ${cli}`);
 }
@@ -282,8 +322,9 @@ export default class SubscriptionCliProvider {
   }
 
   async callApi(prompt, context) {
-    const image = context?.vars?.image;
-    if (!image) {
+    const image = imagePath(context);
+    const kind = inputKind(context);
+    if (kind === "image" && !image) {
       return { error: "Test var 'image' is missing" };
     }
     const path = cachePath(this.providerId, context);
@@ -317,10 +358,39 @@ export default class SubscriptionCliProvider {
     ).trim();
     const tokenUsage = walkUsage(parsed.payload);
     const model = extractModel(parsed.payload);
+    const limitHit = /5-hour limit/i.test(output);
+    const cliError = parsed.payload?.is_error === true || limitHit;
+    if (cliError) {
+      const reason = limitHit
+        ? output
+        : output || `CLI returned is_error (exit ${ran.code})`;
+      await writeFile(
+        path,
+        `${JSON.stringify(
+          {
+            provider: this.providerId,
+            scale: scaleName(context),
+            run: runName(context),
+            error: reason,
+            output: "",
+            usageRaw: parsed.payload?.usage || null,
+            exitCode: ran.code,
+            createdAt: new Date().toISOString(),
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      return { error: reason, metadata: { rawPath: path, model } };
+    }
     const record = {
       provider: this.providerId,
       scale: scaleName(context),
-      image,
+      run: runName(context),
+      inputKind: kind,
+      image: image || null,
+      estimateClaude: context?.vars?.estimate_claude ?? null,
+      estimateClaudeRaw: context?.vars?.estimate_claude_raw ?? null,
       command,
       // Do not store args that might be huge; store the prompt and model only.
       model,

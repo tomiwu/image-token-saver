@@ -75,3 +75,24 @@ test("credits an earlier end time on the first lesson as bug D", () => {
   assert.equal(assertBug(text, "d").pass, true);
   assert.equal(assertFalsePositives(text).pass, true);
 });
+
+test("PONG is zero found and zero false positives", () => {
+  const result = scoreOutput("PONG");
+  assert.equal(result.foundCount, 0);
+  assert.equal(result.falsePositives, 0);
+});
+
+test("ignores dashed 'not reported' notes after a numbered bug list", () => {
+  const text = `
+1. The first lesson starts at 25:00.
+2. Matematyka is duplicated on the fourth row.
+
+I did not report these items:
+- The 09.45 string is probably an OCR error.
+- The payment date can differ from the selected day.
+`;
+  const result = scoreOutput(text);
+  assert.equal(result.found.d, true);
+  assert.equal(result.found.b, true);
+  assert.equal(result.falsePositives, 0);
+});

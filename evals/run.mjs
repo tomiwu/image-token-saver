@@ -2,6 +2,8 @@
 /**
  * One-command eval runner: npm run eval
  * Requires subscription CLIs (claude, agent). Not wired to CI or precommit.
+ *
+ * EVALS_SUITE=methods runs the crop / diff / OCR / greyscale comparison.
  */
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -10,10 +12,21 @@ import { fileURLToPath } from "node:url";
 import { writeReports } from "./lib/report.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const CONFIG_SRC = join(ROOT, "evals/promptfooconfig.yaml");
 
 function envDir() {
   return process.env.EVALS_IMAGE_DIR || "/workspace/image-tokens/evals";
+}
+
+function selectedSuite() {
+  const fromArg = process.argv.slice(2).find((arg) => !arg.startsWith("-"));
+  return process.env.EVALS_SUITE || fromArg || "scales";
+}
+
+function configPath(suite) {
+  if (suite === "methods") {
+    return join(ROOT, "evals/promptfooconfig-methods.yaml");
+  }
+  return join(ROOT, "evals/promptfooconfig.yaml");
 }
 
 function sh(command, args, opts = {}) {
@@ -32,18 +45,35 @@ function sh(command, args, opts = {}) {
   });
 }
 
-async function requiredFiles(dir) {
-  const needed = [
-    "buggy-01.png",
-    "buggy-01-key.png",
-    "scales/full.png",
-    "scales/scale-0.75.png",
-    "scales/scale-0.5.png",
-    "scales/scale-0.34.png",
-    "scales/scale-0.25.png",
-    "scales/max-side-512.png",
-  ];
-  for (const rel of needed) {
+const SCALE_FILES = [
+  "buggy-01.png",
+  "buggy-01-key.png",
+  "scales/full.png",
+  "scales/scale-0.75.png",
+  "scales/scale-0.5.png",
+  "scales/scale-0.34.png",
+  "scales/scale-0.25.png",
+  "scales/max-side-512.png",
+];
+
+const METHOD_FILES = [
+  "buggy-01.png",
+  "buggy-01-key.png",
+  "scales/full.png",
+  "scales/scale-0.25.png",
+  "clean.png",
+  "variants/crop-lessons.png",
+  "variants/crop-dzis.png",
+  "variants/crop-union.png",
+  "variants/crop-payment.png",
+  "variants/diff.png",
+  "variants/greyscale.png",
+  "variants/ocr.txt",
+  "variants/manifest.json",
+];
+
+async function requiredFiles(dir, files) {
+  for (const rel of files) {
     try {
       await access(join(dir, rel));
     } catch {
@@ -51,6 +81,20 @@ async function requiredFiles(dir) {
         `Missing ${join(dir, rel)}. Build the uncommitted eval images first (see evals/README.md).`,
       );
     }
+  }
+}
+
+async function ensureMethodFiles(dir) {
+  try {
+    await requiredFiles(dir, METHOD_FILES);
+  } catch {
+    console.log(
+      "evals: missing method images; running evals/prepare-variants.mjs",
+    );
+    await sh("node", ["evals/prepare-variants.mjs"], {
+      env: { EVALS_IMAGE_DIR: dir },
+    });
+    await requiredFiles(dir, METHOD_FILES);
   }
 }
 
@@ -91,16 +135,33 @@ function filterProviderSection(yaml, allow) {
   return `${head}${kept.join("")}${tail}`;
 }
 
+function commandLabel(suite, allow) {
+  const parts = [];
+  if (suite === "methods") {
+    parts.push("EVALS_SUITE=methods");
+  }
+  if (allow.length) {
+    parts.push(`EVALS_PROVIDERS=${allow.join(",")}`);
+  }
+  parts.push("npm run eval");
+  return parts.join(" ");
+}
+
 async function main() {
+  const suite = selectedSuite();
   const imageDir = envDir();
   process.env.EVALS_IMAGE_DIR = imageDir;
   process.env.EVALS_WORKSPACE =
     process.env.EVALS_WORKSPACE || "/tmp/its-eval-ws";
   await mkdir(process.env.EVALS_WORKSPACE, { recursive: true });
   await mkdir(join(imageDir, "raw"), { recursive: true });
-  await requiredFiles(imageDir);
+  if (suite === "methods") {
+    await ensureMethodFiles(imageDir);
+  } else {
+    await requiredFiles(imageDir, SCALE_FILES);
+  }
 
-  const src = await readFile(CONFIG_SRC, "utf8");
+  const src = await readFile(configPath(suite), "utf8");
   const allow = selectedProviders();
   const resolved = filterProviderSection(
     src.replaceAll("{{env.EVALS_IMAGE_DIR}}", imageDir),
@@ -111,8 +172,12 @@ async function main() {
   if (allow.length) {
     console.log(`evals: providers ${allow.join(", ")}`);
   }
+  console.log(`evals: suite ${suite}`);
 
-  const resultsJson = join(imageDir, "results.json");
+  const resultsJson = join(
+    imageDir,
+    suite === "methods" ? "results-methods.json" : "results.json",
+  );
   const resultsHtml = join(imageDir, "results.html");
   const repeat = process.env.EVALS_REPEAT || "1";
 
@@ -152,14 +217,17 @@ async function main() {
     generatedAt: new Date().toISOString(),
     framework:
       "promptfoo 0.126.0 (JavaScript provider; exec: cannot return tokenUsage)",
-    command: allow.length
-      ? `EVALS_PROVIDERS=${allow.join(",")} npm run eval`
-      : "npm run eval",
+    command: commandLabel(suite, allow),
+    suite,
+    issue:
+      suite === "methods"
+        ? "https://github.com/tomiwu/image-token-saver/issues/36"
+        : undefined,
     ran,
     skipped: configured.filter((name) => !ran.includes(name)),
     notes: [
       "Measured Claude Code tokens are the whole request (text, image, and tool use), not the official image-only formula from this repo's CLI.",
-      "Cursor CLI models are in the config but need `agent login` on the machine.",
+      "Cursor CLI models are in the scale-sweep config but need `agent login` on the machine. This methods run uses Claude Code only.",
     ],
   };
   const written = await writeReports(resultsJson, imageDir, meta);
