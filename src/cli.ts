@@ -3,9 +3,17 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CliError, parseArgs, usage } from "./cli-args.ts";
 import { runCli } from "./cli-run.ts";
+import { parseVideoArgs, runVideo } from "./video/cli-video.ts";
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function dispatch(argv: string[]): Promise<string> {
+  if (argv[0] === "video") {
+    return runVideo(parseVideoArgs(argv.slice(1)));
+  }
+  return runCli(parseArgs(argv));
 }
 
 export async function main(argv: string[]): Promise<number> {
@@ -14,7 +22,7 @@ export async function main(argv: string[]): Promise<number> {
     return 0;
   }
   try {
-    const output = await runCli(parseArgs(argv));
+    const output = await dispatch(argv);
     process.stdout.write(`${output}\n`);
     return 0;
   } catch (error) {

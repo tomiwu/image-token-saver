@@ -55,6 +55,8 @@ jobs:
           node-version: "24.22.3"
           cache: npm
       - run: npm ci
+      - uses: ./.github/actions/setup-ffmpeg
+      - run: ffmpeg -version
       - run: npm run test
 
   crap:
