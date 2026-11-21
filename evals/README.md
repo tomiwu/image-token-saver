@@ -18,6 +18,8 @@ Expected files in `$EVALS_IMAGE_DIR`:
 
 - `buggy-01.png` — 1872×1404 image with the four seeded bugs
 - `buggy-01-key.png` — marked copy with boxes and a legend
+- `clean.png` — copy of the clean start-panel sample (negative case)
+- `layouts/form.png`, `table.png`, `chat.png` — built by `evals/prepare-layouts.mjs`
 - `answer-key.md` — the same text as `evals/answer-key.md`
 - `scales/full.png` — copy of the full-size buggy image
 - `scales/scale-0.75.png`, `scale-0.5.png`, `scale-0.34.png`, `scale-0.25.png`
@@ -58,13 +60,24 @@ EVALS_PROVIDERS=claude-code npm run eval
 
 After `agent login`, omit `EVALS_PROVIDERS` to run every model.
 
-Raise repeats without editing the default:
+Each case runs 3 to 5 times. The default is 3. Set the count with `EVALS_RUNS`:
 
 ```sh
-EVALS_REPEAT=2 npm run eval
+EVALS_RUNS=5 npm run eval
 ```
 
-Raw answers are reused from `$EVALS_IMAGE_DIR/raw/` when present, so a second run does not spend the subscription budget again. Force a new call with `EVALS_FORCE_RERUN=1`.
+The report shows a pass rate for each case (for example 4 of 5 runs passed). A run passes when the model finds every seeded bug and reports no false positive. The report records the model id from the CLI JSON and the CLI version from `--version`.
+
+## Cases
+
+- `buggy-01` at full size, 0.5 and 0.25 scale. See `evals/answer-key.md`.
+- `buggy-01` full size, no tool (baseline). The provider sends the image inline as a base64 block with `claude -p --input-format stream-json --tools ""`. The report shows the measured usage next to the Read-tool row. The difference is the fixed tool cost. The report writes `no measured usage` when the CLI gives no usage JSON.
+- `clean` is a negative case. It is the clean start-panel sample. The right answer is `NONE`. The score is 0 found and 0 false positives.
+- `layout-form`, `layout-table` and `layout-chat` are synthetic 1280×800 layouts. Build them into `$EVALS_IMAGE_DIR/layouts/` with `node evals/prepare-layouts.mjs`. The sharp renderer needs system fonts. The answer keys are in `evals/layout-keys.md`.
+
+The test list is built in `evals/lib/plan.mjs`.
+
+Raw answers are reused from `$EVALS_IMAGE_DIR/raw/` when present (one file for each case and run), so a second run does not spend the subscription budget again. Force a new call with `EVALS_FORCE_RERUN=1`.
 
 ## Providers
 
@@ -92,7 +105,7 @@ Each seeded bug is a named javascript assert (`bug-a` … `bug-d`), plus `saw-im
 Scorer unit tests (no subscriptions):
 
 ```sh
-node --test evals/lib/score.test.mjs
+node --test evals/lib/*.test.mjs
 ```
 
 ## Method comparison (crop, diff, greyscale, OCR)

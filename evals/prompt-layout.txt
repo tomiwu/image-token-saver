@@ -1,0 +1,10 @@
+Look at the screenshot that is given at the end of this text.
+
+The screenshot shows one screen of a user interface. The screen was made for a test. It can be a form, a table, or a message list.
+
+Report only defects in layout or in data. Examples of defects: one widget overlaps another widget, a widget is off the edge of the screen, text is clipped, a time or a date is not valid, a row is a duplicate, or a label has a typo that is clearly wrong.
+
+Do not report a usual design choice. Do not report an alignment preference. Do not report a colour choice or a font choice.
+
+Write a numbered list. For each bug, give one short location (the area of the screen). If there is no bug, write NONE.
+

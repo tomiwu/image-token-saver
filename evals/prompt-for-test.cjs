@@ -2,6 +2,12 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 const IMAGE_PROMPT = readFileSync(join(__dirname, "prompt.txt"), "utf8");
+const LAYOUT_PROMPT = readFileSync(
+  join(__dirname, "prompt-layout.txt"),
+  "utf8",
+);
+const INLINE_LINE = "The screenshot is attached to this message.";
+const FILE_LINE = "Screenshot file: {{image}}";
 
 const OCR_INTRO = `The input below is OCR text from a screenshot of an e-ink school calendar. There is no image file.
 
@@ -49,6 +55,22 @@ function readOcrText(vars) {
   return "";
 }
 
+function withImagePath(text, vars) {
+  return text.replaceAll("{{image}}", vars?.image || "");
+}
+
+function imagePrompt(vars) {
+  const inline = vars?.delivery === "inline";
+  if (vars?.prompt_kind === "layout") {
+    const tail = inline ? INLINE_LINE : FILE_LINE;
+    return withImagePath(`${LAYOUT_PROMPT}${tail}\n`, vars);
+  }
+  const body = inline
+    ? IMAGE_PROMPT.replace(FILE_LINE, INLINE_LINE)
+    : IMAGE_PROMPT;
+  return withImagePath(body, vars);
+}
+
 module.exports = async ({ vars } = {}) => {
   const kind = vars?.input_kind || "image";
   if (kind === "none") {
@@ -57,5 +79,5 @@ module.exports = async ({ vars } = {}) => {
   if (kind === "ocr") {
     return `${OCR_INTRO}${readOcrText(vars)}`;
   }
-  return IMAGE_PROMPT.replaceAll("{{image}}", vars?.image || "");
+  return imagePrompt(vars);
 };

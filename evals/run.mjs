@@ -10,6 +10,7 @@ import { spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeReports } from "./lib/report.mjs";
+import { parseRuns } from "./lib/plan.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -48,12 +49,13 @@ function sh(command, args, opts = {}) {
 const SCALE_FILES = [
   "buggy-01.png",
   "buggy-01-key.png",
+  "clean.png",
   "scales/full.png",
-  "scales/scale-0.75.png",
   "scales/scale-0.5.png",
-  "scales/scale-0.34.png",
   "scales/scale-0.25.png",
-  "scales/max-side-512.png",
+  "layouts/form.png",
+  "layouts/table.png",
+  "layouts/chat.png",
 ];
 
 const METHOD_FILES = [
@@ -111,7 +113,7 @@ function filterProviderSection(yaml, allow) {
     return yaml;
   }
   const start = yaml.indexOf("\nproviders:\n");
-  const end = yaml.indexOf("\ndefaultTest:");
+  const end = yaml.indexOf("\nevaluateOptions:");
   if (start < 0 || end < 0 || end <= start) {
     throw new Error("Could not find providers section in the config");
   }
@@ -133,6 +135,29 @@ function filterProviderSection(yaml, allow) {
     throw new Error(`No providers matched EVALS_PROVIDERS=${allow.join(",")}`);
   }
   return `${head}${kept.join("")}${tail}`;
+}
+
+function cliVersion(command) {
+  return new Promise((resolvePromise) => {
+    let out = "";
+    const child = spawn(command, ["--version"], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    child.stdout.on("data", (chunk) => {
+      out += chunk;
+    });
+    child.on("error", () => resolvePromise("not installed"));
+    child.on("close", () => resolvePromise(out.trim() || "unknown"));
+  });
+}
+
+async function cliVersions(ran) {
+  const versions = { claude: await cliVersion("claude") };
+  const needsAgent = ran.some((name) => name !== "claude-code");
+  if (needsAgent) {
+    versions.agent = await cliVersion("agent");
+  }
+  return versions;
 }
 
 function commandLabel(suite, allow) {
@@ -179,7 +204,8 @@ async function main() {
     suite === "methods" ? "results-methods.json" : "results.json",
   );
   const resultsHtml = join(imageDir, "results.html");
-  const repeat = process.env.EVALS_REPEAT || "1";
+  const runs = parseRuns(process.env.EVALS_RUNS);
+  process.env.EVALS_RUNS = String(runs);
 
   const args = [
     "--yes",
@@ -189,8 +215,6 @@ async function main() {
     resolvedPath,
     "-j",
     "1",
-    "--repeat",
-    repeat,
     "--no-share",
     "-o",
     resultsJson,
@@ -200,7 +224,7 @@ async function main() {
   console.log(`evals: EVALS_IMAGE_DIR=${imageDir}`);
   console.log(`evals: npx ${args.join(" ")}`);
   const code = await sh("npx", args, {
-    env: { EVALS_IMAGE_DIR: imageDir },
+    env: { EVALS_IMAGE_DIR: imageDir, EVALS_RUNS: String(runs) },
     allowCodes: [100],
   });
   console.log(`evals: promptfoo exited ${code}`);
@@ -218,6 +242,8 @@ async function main() {
     framework:
       "promptfoo 0.126.0 (JavaScript provider; exec: cannot return tokenUsage)",
     command: commandLabel(suite, allow),
+    runs,
+    cliVersions: await cliVersions(ran),
     suite,
     issue:
       suite === "methods"
