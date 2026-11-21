@@ -5,10 +5,6 @@ import { estimateTokens } from "../src/estimators.ts";
 import { createFocusMaskMethod } from "../src/focus-mask.ts";
 import { readImageInfo } from "../src/image-io.ts";
 
-// Limit: official token formulas use the full width and height.
-// This method alone keeps the canvas size. It does not cut formula tokens.
-// It improves focus at a given size. A resize or a crop must cut tokens.
-
 const WIDTH = 320;
 const HEIGHT = 200;
 const REGION = { left: 80, top: 50, width: 120, height: 80 };
