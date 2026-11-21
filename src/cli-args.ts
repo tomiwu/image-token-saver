@@ -1,5 +1,6 @@
 import type { TargetModel } from "./estimators.ts";
 import type { CropRect } from "./method.ts";
+import { videoUsage } from "./video/cli-video.ts";
 
 export type CliCommand = "reduce" | "estimate";
 export type MethodName = "resize" | "crop" | "palette" | "mask" | "diff";
@@ -59,6 +60,7 @@ export function usage(): string {
     "Usage:",
     "  image-token-saver reduce <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--method resize|crop|palette|mask|diff] [--scale <0..1>] [--max-side <px>] [--rect x,y,w,h] [--prev <file>] --out <file> [--json]",
     "  image-token-saver estimate <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--json]",
+    videoUsage(),
     "  Default resize is 0.5 of the vendor's own target size. --scale is a fraction of the original size.",
   ].join("\n");
 }
