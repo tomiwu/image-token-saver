@@ -88,8 +88,19 @@ export function foundBugC(text) {
   return mentionsEdukacja(n) && mentionsCutoff(n);
 }
 
+function mentionsEndBeforeStart(text) {
+  return has(
+    text,
+    /end time.{0,60}(?:earlier|before).{0,40}start|start time.{0,60}(?:later|after).{0,40}end/,
+  );
+}
+
 export function foundBugD(text) {
-  return mentionsTimeTypo(normalize(text));
+  const n = normalize(text);
+  if (mentionsTimeTypo(n)) {
+    return true;
+  }
+  return mentionsEndBeforeStart(n) && /row 1|first lesson|08:45/.test(n);
 }
 
 const CHECKS = {

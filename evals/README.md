@@ -1,6 +1,6 @@
 # Screenshot bug eval
 
-This folder is a [promptfoo](https://github.com/promptfoo/promptfoo) eval. It asks subscription CLIs to list bugs in a seeded calendar screenshot, then scores the answers with deterministic javascript/regex asserts against `evals/answer-key.md`.
+This folder is a [promptfoo](https://github.com/promptfoo/promptfoo) eval. The eval asks a subscription CLI to list bugs in a seeded calendar screenshot. The scores use deterministic javascript checks against `evals/answer-key.md`. The prompt describes the usual user interface. The prompt asks for a numbered list of layout defects and data defects only. Each item must include a short location.
 
 The eval is **not** part of CI or `scripts/precommit.sh`. It needs the Claude Code and Cursor CLI logins on the machine.
 

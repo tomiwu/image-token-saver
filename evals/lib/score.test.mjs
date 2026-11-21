@@ -68,3 +68,10 @@ test("credits 'repeats the second entry Matematyka' as bug B", () => {
     '3. The last entry comes after 10:00. It also repeats the second entry, "2. Matematyka" at 09:00–09:45.';
   assert.equal(assertBug(text, "b").pass, true);
 });
+
+test("credits an earlier end time on the first lesson as bug D", () => {
+  const text =
+    "4. Lesson list, row 1: the end time (08:45) is earlier than the start time, though this follows from the invalid start time in item 1.";
+  assert.equal(assertBug(text, "d").pass, true);
+  assert.equal(assertFalsePositives(text).pass, true);
+});

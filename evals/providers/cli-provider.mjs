@@ -327,6 +327,8 @@ export default class SubscriptionCliProvider {
       output,
       tokenUsage: tokenUsage || null,
       usageRaw: parsed.payload?.usage || parsed.payload?.tokenUsage || null,
+      numTurns: parsed.payload?.num_turns ?? null,
+      stopReason: parsed.payload?.stop_reason ?? null,
       exitCode: ran.code,
       stderr: ran.stderr.slice(0, 8000),
       createdAt: new Date().toISOString(),
