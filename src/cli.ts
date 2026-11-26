@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CliError, parseArgs, usage } from "./cli-args.ts";
 import { runCli } from "./cli-run.ts";
+import { runCalibrate, runCaptureCommand } from "./calibrate/cli-calibrate.ts";
 import { parseVideoArgs, runVideo } from "./video/cli-video.ts";
 
 export function errorMessage(error: unknown): string {
@@ -10,6 +11,12 @@ export function errorMessage(error: unknown): string {
 }
 
 async function dispatch(argv: string[]): Promise<string> {
+  if (argv[0] === "calibrate") {
+    return runCalibrate(argv.slice(1));
+  }
+  if (argv[0] === "capture") {
+    return runCaptureCommand(argv.slice(1));
+  }
   if (argv[0] === "video") {
     return runVideo(parseVideoArgs(argv.slice(1)));
   }

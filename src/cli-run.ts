@@ -15,6 +15,7 @@ import { diffMethod } from "./methods/diff.ts";
 import { palette16Method } from "./methods/colour-depth.ts";
 import { estimateTokens } from "./estimators.ts";
 import type { TargetModel } from "./estimators.ts";
+import { loadWarper } from "./calibrate/apply.ts";
 import { requestedResizeSize } from "./resize.ts";
 
 export interface CliReport {
@@ -218,8 +219,24 @@ function baseReport(
   };
 }
 
-async function runEstimate(args: CliArgs): Promise<CliReport> {
-  const info = await readImageInfo(args.input);
+export type Loader = (path: string) => Promise<string | Uint8Array>;
+
+export async function makeLoader(args: {
+  cal?: string;
+  width?: number;
+}): Promise<Loader> {
+  if (!args.cal) {
+    if (args.width !== undefined) {
+      throw new CliError("The --width flag needs --cal <calibration.json>.");
+    }
+    return async (path) => path;
+  }
+  const warper = await loadWarper(args.cal, args.width);
+  return (path) => warper.warp(path);
+}
+
+async function runEstimate(args: CliArgs, load: Loader): Promise<CliReport> {
+  const info = await readImageInfo(await load(args.input));
   const tokens = estimateTokens(info.width, info.height, args.model);
   return baseReport(args, "none", tokens, tokens, info);
 }
@@ -257,17 +274,18 @@ function toReport(
   };
 }
 
-async function runReduce(args: CliArgs): Promise<CliReport> {
+async function runReduce(args: CliArgs, load: Loader): Promise<CliReport> {
   const out = requireOut(args);
   assertRectIfNeeded(args);
   assertPrevIfNeeded(args);
-  const info = await readImageInfo(args.input);
+  const image = await load(args.input);
+  const info = await readImageInfo(image);
   const tokensBefore = estimateTokens(info.width, info.height, args.model);
   const request: MethodRequest = {
-    image: args.input,
+    image,
     model: args.model,
     region: args.rect,
-    previous: args.prev,
+    previous: args.prev ? await load(args.prev) : undefined,
   };
   const result = await applyNamed(args, request);
   if (result.image) {
@@ -277,9 +295,10 @@ async function runReduce(args: CliArgs): Promise<CliReport> {
 }
 
 export async function runCli(args: CliArgs): Promise<string> {
+  const load = await makeLoader(args);
   const report =
     args.command === "estimate"
-      ? await runEstimate(args)
-      : await runReduce(args);
+      ? await runEstimate(args, load)
+      : await runReduce(args, load);
   return formatReport(report, args.json);
 }

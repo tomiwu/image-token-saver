@@ -1,7 +1,9 @@
 import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { CliError, requireValue } from "../cli-args.ts";
+import { CliError, parseWidth, requireValue } from "../cli-args.ts";
+import { makeLoader } from "../cli-run.ts";
 import { parseEventLog } from "./event-log.ts";
 import { readVideoFrames } from "./ffmpeg.ts";
 import { readFolderFrames } from "./folder.ts";
@@ -13,12 +15,14 @@ export interface VideoArgs {
   outDir?: string;
   fps: number;
   json: boolean;
+  cal?: string;
+  width?: number;
 }
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov"]);
 
 export function videoUsage(): string {
-  return "  image-token-saver video <file.mp4|file.mov|folder> [--events <log.json>] [--out-dir <dir>] [--fps <n>] [--json]";
+  return "  image-token-saver video <file.mp4|file.mov|folder> [--events <log.json>] [--out-dir <dir>] [--fps <n>] [--cal <calibration.json>] [--width <px>] [--json]";
 }
 
 function parseFps(value: string): number {
@@ -43,6 +47,14 @@ function setFps(args: PartialVideoArgs, value: string): void {
   args.fps = parseFps(value);
 }
 
+function setCal(args: PartialVideoArgs, value: string): void {
+  args.cal = value;
+}
+
+function setWidth(args: PartialVideoArgs, value: string): void {
+  args.width = parseWidth(value);
+}
+
 const VALUE_FLAGS: Record<
   string,
   (args: PartialVideoArgs, value: string) => void
@@ -50,6 +62,8 @@ const VALUE_FLAGS: Record<
   "--events": setEvents,
   "--out-dir": setOutDir,
   "--fps": setFps,
+  "--cal": setCal,
+  "--width": setWidth,
 };
 
 function applyFlag(
@@ -91,6 +105,8 @@ export function parseVideoArgs(argv: string[]): VideoArgs {
     outDir: args.outDir,
     fps: args.fps ?? 1,
     json: Boolean(args.json),
+    cal: args.cal,
+    width: args.width,
   };
 }
 
@@ -141,9 +157,27 @@ function formatPlain(set: FrameSet, events?: VideoEvent[]): string {
   return lines.join("\n");
 }
 
+async function warpFrames(set: FrameSet, args: VideoArgs): Promise<FrameSet> {
+  const load = await makeLoader(args);
+  if (!args.cal) {
+    return set;
+  }
+  const base =
+    args.outDir ?? (await mkdtemp(join(tmpdir(), "image-token-saver-")));
+  const dir = join(base, "warped");
+  await mkdir(dir, { recursive: true });
+  const frames = [];
+  for (const frame of set.frames) {
+    const path = join(dir, `frame-${String(frame.index).padStart(6, "0")}.png`);
+    await writeFile(path, (await load(frame.path)) as Uint8Array);
+    frames.push({ ...frame, path });
+  }
+  return { ...set, frames };
+}
+
 export async function runVideo(args: VideoArgs): Promise<string> {
   const events = await readEvents(args.events);
-  const set = await readFrames(args);
+  const set = await warpFrames(await readFrames(args), args);
   if (args.json) {
     return JSON.stringify({ ...set, events });
   }
