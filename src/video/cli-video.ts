@@ -1,6 +1,5 @@
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { mkdir, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { CliError, parseWidth, requireValue } from "../cli-args.ts";
 import { makeLoader } from "../cli-run.ts";

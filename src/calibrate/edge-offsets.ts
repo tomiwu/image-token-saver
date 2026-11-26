@@ -28,11 +28,11 @@ export function applyEdgeOffsets(
 ): Corners {
   const scale = target.width / VIEW_WIDTH;
   const rect = rectCorners(target);
-  const o = { left: 0, right: 0, top: 0, bottom: 0, ...offsets };
-  const left = o.left * scale;
-  const right = rect.tr[0] - o.right * scale;
-  const top = o.top * scale;
-  const bottom = rect.bl[1] - o.bottom * scale;
+  const viewPx = { left: 0, right: 0, top: 0, bottom: 0, ...offsets };
+  const left = viewPx.left * scale;
+  const right = rect.tr[0] - viewPx.right * scale;
+  const top = viewPx.top * scale;
+  const bottom = rect.bl[1] - viewPx.bottom * scale;
   if (right - left < 1 || bottom - top < 1) {
     throw new CalibrationError("The edge offsets leave no screen area.");
   }

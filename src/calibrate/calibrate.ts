@@ -8,7 +8,7 @@ import {
 } from "./calibration-file.ts";
 import { assertChecks, runChecks } from "./checks.ts";
 import { detectPanel, type Panel } from "./detect.ts";
-import { refineWithLlm, type LlmRefiner, type LlmRound } from "./llm-refine.ts";
+import { refineWithLlm, type LlmRefiner } from "./llm-refine.ts";
 import { loadGray } from "./mask.ts";
 import { INSTRUCTION, renderOverlay, writePhoneCheck } from "./phone-check.ts";
 import {
@@ -66,10 +66,9 @@ async function refine(
         VIEW_WIDTH,
       ),
   });
-  const rounds: LlmRound[] = result.rounds;
   return {
     corners: result.corners,
-    llm: { rounds, totalTokens: result.totalTokens },
+    llm: { rounds: result.rounds, totalTokens: result.totalTokens },
   };
 }
 

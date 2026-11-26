@@ -398,8 +398,6 @@ test("estimate, reduce and video use --cal and --width", async () => {
       ]),
       0,
     );
-    const folder = join(dir, "frames");
-    await sharp(scene).toFile(join(dir, "frame1.png"));
     const framesDir = await workDir();
     await sharp(scene).toFile(join(framesDir, "a.png"));
     await sharp(scene).toFile(join(framesDir, "b.png"));
@@ -408,7 +406,6 @@ test("estimate, reduce and video use --cal and --width", async () => {
       await main(["video", framesDir, "--cal", cal, "--out-dir", outDir]),
       0,
     );
-    assert.equal(folder.length > 0, true);
   } finally {
     process.stdout.write = write;
   }
@@ -790,6 +787,19 @@ test("calibrate and capture flags are validated", async () => {
     runCalibrate(["--image", image, "--out", out, "--target", "1920x1080"]),
     /target aspect 1\.7778/,
   );
-  assert.equal(runChecks.length, 1);
+  const found = detectPanel(
+    await loadGray(await renderScene(FRAME.width, FRAME.height)),
+    "light",
+  );
+  assert.equal(
+    runChecks({
+      corners: SCENE_CORNERS,
+      capture: FRAME,
+      target: { width: 1872, height: 1404 },
+      aspect: 4 / 3,
+      edgePoints: found.edgePoints,
+    }).length,
+    4,
+  );
   assert.ok(CalibrationError.name);
 });

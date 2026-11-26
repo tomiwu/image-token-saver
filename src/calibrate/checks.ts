@@ -3,7 +3,7 @@ import {
   homographyToCorners,
   invertHomography,
 } from "./homography.ts";
-import { fitLine, rmsResidual } from "./line-fit.ts";
+import { fitLine, rmsResidual, type SidePoints } from "./line-fit.ts";
 import {
   CalibrationError,
   CORNER_NAMES,
@@ -18,7 +18,6 @@ import {
   type Side,
   type Size,
 } from "./types.ts";
-import type { SidePoints } from "./line-fit.ts";
 
 export const CORNER_MARGIN_PX = 12;
 export const MAX_ANGLE_DEG = 1;

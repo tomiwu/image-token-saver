@@ -45,7 +45,10 @@ export function finalize(draft: Draft, now: Date): Calibration {
   return draft.llm_refine ? { ...final, llm_refine: draft.llm_refine } : final;
 }
 
-async function confirm(options: AdjustOptions, draft: Draft): Promise<string> {
+async function confirmDraft(
+  options: AdjustOptions,
+  draft: Draft,
+): Promise<string> {
   draft.checks = runChecks(draft);
   assertChecks(draft.checks);
   await writeJson(options.cal, finalize(draft, options.now?.() ?? new Date()));
@@ -53,7 +56,10 @@ async function confirm(options: AdjustOptions, draft: Draft): Promise<string> {
   return `calibration=${options.cal}`;
 }
 
-async function move(options: AdjustOptions, draft: Draft): Promise<string> {
+async function applyOffsets(
+  options: AdjustOptions,
+  draft: Draft,
+): Promise<string> {
   const offsets = parseOffsets(options.words);
   draft.corners = applyEdgeOffsets(draft.corners, draft.target, offsets);
   draft.adjustments = [...draft.adjustments, offsets];
@@ -77,5 +83,5 @@ export async function adjust(options: AdjustOptions): Promise<string> {
   const draft = await readDraft(options.cal);
   const isOk =
     options.words.length === 1 && options.words[0].toLowerCase() === "ok";
-  return isOk ? confirm(options, draft) : move(options, draft);
+  return isOk ? confirmDraft(options, draft) : applyOffsets(options, draft);
 }

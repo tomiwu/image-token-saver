@@ -71,7 +71,7 @@ interface Step {
   round: LlmRound;
 }
 
-function clamp(value: number): number {
+function clampViewOffsetPx(value: number): number {
   return Math.max(
     -MAX_LLM_OFFSET_VIEW_PX,
     Math.min(MAX_LLM_OFFSET_VIEW_PX, value),
@@ -87,7 +87,7 @@ export function verdictOffsets(
     const entry = verdict.sides[side];
     const unclean = entry.nonUiVisible || entry.uiCutOff;
     if (unclean && entry.offsetPx !== 0) {
-      offsets[side] = clamp(entry.offsetPx * factor);
+      offsets[side] = clampViewOffsetPx(entry.offsetPx * factor);
     }
   }
   return offsets;

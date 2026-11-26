@@ -76,19 +76,19 @@ export function applyHomography(h: Matrix3, point: Point): Point {
 }
 
 export function invertHomography(h: Matrix3): Matrix3 {
-  const [a, b, c, d, e, f, g, i, j] = h;
+  const [h0, h1, h2, h3, h4, h5, h6, h7, h8] = h;
   const cofactors = [
-    e * j - f * i,
-    c * i - b * j,
-    b * f - c * e,
-    f * g - d * j,
-    a * j - c * g,
-    c * d - a * f,
-    d * i - e * g,
-    b * g - a * i,
-    a * e - b * d,
+    h4 * h8 - h5 * h7,
+    h2 * h7 - h1 * h8,
+    h1 * h5 - h2 * h4,
+    h5 * h6 - h3 * h8,
+    h0 * h8 - h2 * h6,
+    h2 * h3 - h0 * h5,
+    h3 * h7 - h4 * h6,
+    h1 * h6 - h0 * h7,
+    h0 * h4 - h1 * h3,
   ];
-  const det = a * cofactors[0] + b * cofactors[3] + c * cofactors[6];
+  const det = h0 * cofactors[0] + h1 * cofactors[3] + h2 * cofactors[6];
   if (Math.abs(det) < 1e-18) {
     throw new CalibrationError("The homography cannot be inverted.");
   }
