@@ -78,16 +78,16 @@ test("a vanishing layer gives an appear and a disappear event", () => {
 
 test("the rectangle changes pixels at the event frame only", async () => {
   const clip = find("change-dialog");
-  const inside = { x: 30, y: 20 };
+  const pixel = { x: 30, y: 20 };
   const before = await grey(
     join(clip.folder, "frame-0004.png"),
-    inside.x,
-    inside.y,
+    pixel.x,
+    pixel.y,
   );
   const after = await grey(
     join(clip.folder, "frame-0005.png"),
-    inside.x,
-    inside.y,
+    pixel.x,
+    pixel.y,
   );
   assert.ok(before < 100);
   assert.equal(after, 220);
@@ -113,7 +113,10 @@ test("the generator is deterministic", async () => {
   const one = await readFile(
     join(find("still-noise-flicker").folder, "frame-0003.png"),
   );
-  const two = await readFile(join(again[4].folder, "frame-0003.png"));
+  const replay = find("still-noise-flicker");
+  const regenerated = again.find((item) => item.name === replay.name);
+  assert.ok(regenerated, "regenerated still-noise-flicker clip exists");
+  const two = await readFile(join(regenerated.folder, "frame-0003.png"));
   assert.deepEqual(one, two);
 });
 

@@ -8,6 +8,7 @@ import {
   type GroundTruth,
   type GroundTruthEvent,
 } from "./ground-truth.ts";
+import { VideoInputError } from "./types.ts";
 
 export interface Layer {
   label: string;
@@ -176,11 +177,18 @@ function ghostLevel(scenario: Scenario, frame: number): number {
   return Math.round(ghost.peak * remaining);
 }
 
-function layerAt(scenario: Scenario, frame: number): Layer[] {
+function activeLayersForFrame(scenario: Scenario, frame: number): Layer[] {
   return scenario.layers.filter(
     (layer) =>
       frame >= layer.from && (layer.until === undefined || frame < layer.until),
   );
+}
+
+function flickerOffset(scenario: Scenario, frame: number): number {
+  if (scenario.flicker === 0 || frame % 2 === 0) {
+    return 0;
+  }
+  return scenario.flicker;
 }
 
 function pixelGrey(
@@ -195,8 +203,10 @@ function pixelGrey(
     return top.grey;
   }
   const gradient = (x + y) % 16;
-  const ghosted =
-    scenario.ghost && inside(scenario.ghost.rect, x, y) ? ghost : 0;
+  let ghosted = 0;
+  if (scenario.ghost && inside(scenario.ghost.rect, x, y)) {
+    ghosted = ghost;
+  }
   return BASE_GREY + gradient + ghosted;
 }
 
@@ -210,10 +220,9 @@ export async function renderFrame(
 ): Promise<Buffer> {
   const { width, height } = scenario;
   const random = { value: (scenario.seed * 7919 + frame * 104729) >>> 0 };
-  const active = layerAt(scenario, frame);
+  const active = activeLayersForFrame(scenario, frame);
   const ghost = ghostLevel(scenario, frame);
-  const flicker =
-    scenario.flicker === 0 ? 0 : frame % 2 === 0 ? 0 : scenario.flicker;
+  const flicker = flickerOffset(scenario, frame);
   const data = Buffer.alloc(width * height * 3);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -230,22 +239,26 @@ export async function renderFrame(
 }
 
 export function groundTruthFor(scenario: Scenario): GroundTruth {
-  const events: GroundTruthEvent[] = [];
-  for (const layer of scenario.layers) {
-    events.push({
-      time: layer.from / scenario.fps,
-      rect: layer.rect,
-      label: `${layer.label}-appears`,
-    });
-    if (layer.until !== undefined) {
-      events.push({
-        time: layer.until / scenario.fps,
+  const events = scenario.layers
+    .flatMap((layer): GroundTruthEvent[] => {
+      const appear: GroundTruthEvent = {
+        time: layer.from / scenario.fps,
         rect: layer.rect,
-        label: `${layer.label}-disappears`,
-      });
-    }
-  }
-  events.sort((a, b) => a.time - b.time);
+        label: `${layer.label}-appears`,
+      };
+      if (layer.until === undefined) {
+        return [appear];
+      }
+      return [
+        appear,
+        {
+          time: layer.until / scenario.fps,
+          rect: layer.rect,
+          label: `${layer.label}-disappears`,
+        },
+      ];
+    })
+    .sort((a, b) => a.time - b.time);
   return {
     version: 1,
     width: scenario.width,
@@ -275,14 +288,16 @@ function encode(framesDir: string, fps: number, output: string): Promise<void> {
       output,
     ]);
     child.on("error", () => {
-      reject(new Error("ffmpeg was not found. Install ffmpeg 7 on PATH."));
+      reject(
+        new VideoInputError("ffmpeg was not found. Install ffmpeg 7 on PATH."),
+      );
     });
     child.on("close", (code) => {
       if (code === 0) {
         resolve();
         return;
       }
-      reject(new Error(`ffmpeg exited with code ${code}.`));
+      reject(new VideoInputError(`ffmpeg exited with code ${code}.`));
     });
   });
 }
