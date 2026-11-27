@@ -72,20 +72,35 @@ async function refine(
   };
 }
 
+function detectOptions(options: CalibrateOptions): {
+  panel: Panel;
+  aspect: number;
+} {
+  return {
+    panel: options.panel ?? "auto",
+    aspect: options.aspect ?? DEFAULT_ASPECT,
+  };
+}
+
+function createdAt(options: CalibrateOptions): string {
+  return (options.now?.() ?? new Date()).toISOString();
+}
+
 export async function calibrate(options: CalibrateOptions): Promise<string> {
   const bytes = await readFile(options.image);
   const gray = await loadGray(bytes);
-  const found = detectPanel(gray, options.panel ?? "auto");
+  const polarity = detectOptions(options);
+  const found = detectPanel(gray, polarity.panel, polarity.aspect);
   const draft: Draft = {
     version: 1,
     capture: { width: gray.width, height: gray.height },
     corners: found.corners,
     k1: found.k1,
     target: options.target ?? DEFAULT_TARGET,
-    created: (options.now?.() ?? new Date()).toISOString(),
+    created: createdAt(options),
     checks: [],
     adjustments: [],
-    aspect: options.aspect ?? DEFAULT_ASPECT,
+    aspect: polarity.aspect,
     source: resolve(options.image),
     edgePoints: found.edgePoints,
   };

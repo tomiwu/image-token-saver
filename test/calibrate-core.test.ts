@@ -22,7 +22,11 @@ import {
   type Corners,
   type Point,
 } from "../src/calibrate/types.ts";
-import { SCENE_CORNERS, renderScene } from "./calibrate-scene.ts";
+import {
+  SCENE_CORNERS,
+  renderPaleCabledScene,
+  renderScene,
+} from "./calibrate-scene.ts";
 
 function near(actual: Point, expected: Point, tolerance: number): void {
   assert.ok(
@@ -133,6 +137,15 @@ test("detect fails on a blank frame", async () => {
   const blank = Buffer.alloc(64 * 48, 100);
   const gray = { data: blank, width: 64, height: 48 };
   assert.throws(() => detectPanel(gray, "auto"), /not found/);
+});
+
+test("detect finds a pale panel against a white wall, bezel and cables", async () => {
+  const gray = await loadGray(await renderPaleCabledScene(640, 480));
+  const found = detectPanel(gray, "auto");
+  for (const name of ["tl", "tr", "br", "bl"] as const) {
+    near(found.corners[name], SCENE_CORNERS[name], 4);
+  }
+  near(detectPanel(gray, "light").corners.tl, SCENE_CORNERS.tl, 4);
 });
 
 test("fitQuad needs points on every edge", () => {

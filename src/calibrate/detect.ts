@@ -1,131 +1,90 @@
-import { undistortPoint } from "./distortion.ts";
-import { fitQuad, type QuadFit, type SidePoints } from "./line-fit.ts";
 import {
-  boundaryPoints,
-  fillHoles,
-  largestComponent,
-  maskArea,
-  otsuThreshold,
-  sideLabels,
-  thresholdMask,
-  type GrayImage,
-} from "./mask.ts";
+  chooseK1,
+  sampleEdgePoints,
+  type Detection,
+  type Panel,
+} from "./detect-k1.ts";
 import {
-  CalibrationError,
-  SIDES,
-  cornerList,
-  type Corners,
-  type Point,
-  type Side,
-} from "./types.ts";
+  detectHairlines,
+  hairlineError,
+  interiorMean,
+  polarityOk,
+  type HairlineHit,
+} from "./hairlines.ts";
+import type { SidePoints } from "./line-fit.ts";
+import type { GrayImage } from "./mask.ts";
+import { DEFAULT_ASPECT, SIDES, type Point, type Side } from "./types.ts";
 
-export type Panel = "auto" | "light" | "dark";
+export type { Detection, Panel } from "./detect-k1.ts";
+export { chooseK1, polygonArea, sampleEdgePoints } from "./detect-k1.ts";
 
-export interface Detection {
-  corners: Corners;
-  k1: number;
-  edgePoints: SidePoints;
-  fill: number;
-  rms: number;
-}
-
-export const K1_MIN_GAIN = 0.05;
-const K1_STEP = 0.02;
-const K1_STEPS = 10;
-const EDGE_POINT_LIMIT = 60;
-
-export function polygonArea(corners: Corners): number {
-  const points = cornerList(corners);
-  let sum = 0;
-  points.forEach((p, i) => {
-    const q = points[(i + 1) % points.length];
-    sum += p[0] * q[1] - q[0] * p[1];
-  });
-  return Math.abs(sum) / 2;
-}
-
-function undistortAll(points: Point[], k1: number, size: GrayImage): Point[] {
-  return points.map((p) => undistortPoint(p, k1, size));
-}
-
-function tryFit(points: Point[], labels: Side[], k1: number, size: GrayImage) {
-  try {
-    return fitQuad(undistortAll(points, k1, size), labels);
-  } catch {
-    return undefined;
+function flattenSides(sides: SidePoints): { points: Point[]; labels: Side[] } {
+  const points: Point[] = [];
+  const labels: Side[] = [];
+  for (const side of SIDES) {
+    appendSide(sides, side, points, labels);
   }
+  return { points, labels };
 }
 
-export function chooseK1(
+function appendSide(
+  sides: SidePoints,
+  side: Side,
   points: Point[],
   labels: Side[],
-  size: GrayImage,
-  baseline: QuadFit,
-): { k1: number; fit: QuadFit } {
-  let best = { k1: 0, fit: baseline };
-  for (let step = -K1_STEPS; step <= K1_STEPS; step++) {
-    const k1 = Math.round(step * K1_STEP * 1e6) / 1e6;
-    const fit = tryFit(points, labels, k1, size);
-    if (fit && fit.rms < best.fit.rms) {
-      best = { k1, fit };
-    }
+): void {
+  for (const point of sides[side]) {
+    points.push(point);
+    labels.push(side);
   }
-  return baseline.rms - best.fit.rms >= K1_MIN_GAIN
-    ? best
-    : { k1: 0, fit: baseline };
 }
 
-function subsample(points: Point[]): Point[] {
-  const stride = Math.max(1, Math.floor(points.length / EDGE_POINT_LIMIT));
-  return points.filter((_, i) => i % stride === 0);
+function k1Source(loose: SidePoints, tight: SidePoints): SidePoints {
+  const count = SIDES.reduce((sum, side) => sum + loose[side].length, 0);
+  return count >= 32 ? loose : tight;
 }
 
-export function sampleEdgePoints(sides: SidePoints): SidePoints {
-  return Object.fromEntries(
-    SIDES.map((side: Side) => [side, subsample(sides[side])]),
-  ) as SidePoints;
-}
-
-function detectPolarity(
+export function detectPanel(
   gray: GrayImage,
-  light: boolean,
-): Detection | undefined {
-  const mask = thresholdMask(gray, light, otsuThreshold(gray.data));
-  const component = largestComponent(mask, gray);
-  if (!component) {
-    return undefined;
+  panel: Panel,
+  aspect = DEFAULT_ASPECT,
+): Detection {
+  const found = detectHairlines(gray, aspect);
+  if (!found) {
+    throw hairlineError();
   }
-  const filled = fillHoles(component, gray);
-  const points = boundaryPoints(filled, gray);
-  const labels = sideLabels(filled, gray, points);
-  const baseline = tryFit(points, labels, 0, gray);
-  if (!baseline) {
-    return undefined;
+  if (!polarityOk(panel, interiorMean(gray, found.corners))) {
+    throw hairlineError();
   }
-  const { k1, fit } = chooseK1(points, labels, gray, baseline);
-  const fill = maskArea(filled) / Math.max(polygonArea(fit.corners), 1);
+  return withOptionalK1(found, gray);
+}
+
+function hairlineDetection(found: HairlineHit): Detection {
   return {
-    corners: fit.corners,
-    k1,
-    edgePoints: sampleEdgePoints(fit.sides),
-    fill,
-    rms: fit.rms,
+    corners: found.corners,
+    k1: 0,
+    edgePoints: sampleEdgePoints(found.edgePoints),
+    fill: 1,
+    rms: found.rms,
   };
 }
 
-function closeness(detection: Detection): number {
-  return Math.min(detection.fill, 1 / detection.fill);
-}
-
-export function detectPanel(gray: GrayImage, panel: Panel): Detection {
-  const polarities = panel === "auto" ? [true, false] : [panel === "light"];
-  const found = polarities
-    .map((light) => detectPolarity(gray, light))
-    .filter((d): d is Detection => d !== undefined);
-  if (found.length === 0) {
-    throw new CalibrationError(
-      "The screen was not found in the frame. Check the camera view and the lighting.",
-    );
+function withOptionalK1(found: HairlineHit, gray: GrayImage): Detection {
+  const sides = k1Source(found.loosePoints, found.edgePoints);
+  const loose = flattenSides(sides);
+  const chosen = chooseK1(loose.points, loose.labels, gray, {
+    corners: found.corners,
+    sides,
+    rms: found.rms,
+  });
+  if (chosen.k1 === 0) {
+    return hairlineDetection(found);
   }
-  return found.reduce((best, d) => (closeness(d) > closeness(best) ? d : best));
+  return {
+    corners: chosen.fit.corners,
+    k1: chosen.k1,
+    edgePoints: sampleEdgePoints(chosen.fit.sides),
+    fill: 1,
+    rms: chosen.fit.rms,
+  };
 }
