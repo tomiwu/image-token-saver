@@ -1,5 +1,6 @@
 import type { TargetModel } from "./estimators.ts";
 import type { CropRect } from "./method.ts";
+import { calibrateUsage } from "./calibrate/cli-calibrate.ts";
 import { videoUsage } from "./video/cli-video.ts";
 
 export type CliCommand = "reduce" | "estimate";
@@ -24,6 +25,8 @@ export interface CliArgs {
   json: boolean;
   scale?: number;
   maxSide?: number;
+  cal?: string;
+  width?: number;
 }
 
 const MODEL_ALIAS: Record<string, TargetModel> = {
@@ -61,6 +64,7 @@ export function usage(): string {
     "  image-token-saver reduce <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--method resize|crop|palette|mask|diff] [--scale <0..1>] [--max-side <px>] [--rect x,y,w,h] [--prev <file>] --out <file> [--json]",
     "  image-token-saver estimate <in> --model <claude|gpt-4o|gpt-5.2|gemini> [--json]",
     videoUsage(),
+    ...calibrateUsage(),
     "  Default resize is 0.5 of the vendor's own target size. --scale is a fraction of the original size.",
   ].join("\n");
 }
@@ -152,6 +156,22 @@ function setScale(args: PartialArgs, value: string): void {
   args.scale = parseScale(value);
 }
 
+function setCal(args: PartialArgs, value: string): void {
+  args.cal = value;
+}
+
+export function parseWidth(value: string): number {
+  const width = Number(value);
+  if (!Number.isInteger(width) || width < 1) {
+    throw new CliError("The --width value must be a positive integer.");
+  }
+  return width;
+}
+
+function setWidth(args: PartialArgs, value: string): void {
+  args.width = parseWidth(value);
+}
+
 function setMaxSide(args: PartialArgs, value: string): void {
   args.maxSide = parseMaxSide(value);
 }
@@ -165,6 +185,8 @@ const VALUE_FLAGS: Record<string, (args: PartialArgs, value: string) => void> =
     "--out": setOut,
     "--scale": setScale,
     "--max-side": setMaxSide,
+    "--cal": setCal,
+    "--width": setWidth,
   };
 
 function applyFlag(args: PartialArgs, tokens: string[], index: number): number {
@@ -230,6 +252,8 @@ function finishArgs(args: PartialArgs): CliArgs {
     json: Boolean(args.json),
     scale: args.scale,
     maxSide: args.maxSide,
+    cal: args.cal,
+    width: args.width,
   };
 }
 
