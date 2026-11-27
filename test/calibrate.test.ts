@@ -58,10 +58,15 @@ import {
   parseAspect,
   parsePanel,
   parsePositive,
+  parseSize,
   parseTarget,
   splitFlags,
 } from "../src/calibrate/cli-calibrate.ts";
-import { CAPTURE_SIZE, captureArgs } from "../src/calibrate/capture.ts";
+import {
+  CAPTURE_SIZE,
+  DEFAULT_FPS,
+  captureArgs,
+} from "../src/calibrate/capture.ts";
 import { main } from "../src/cli.ts";
 import { SCENE_CORNERS, renderScene } from "./calibrate-scene.ts";
 
@@ -699,6 +704,33 @@ test("capture builds the documented ffmpeg arguments", () => {
     captureArgs({ kind: "clip", out: "a.mp4", seconds: 5 })[13],
     "5",
   );
+  const custom = {
+    size: { width: 1280, height: 720 },
+    fps: 24,
+  };
+  const customInput = [
+    "-hide_banner",
+    "-y",
+    "-f",
+    "avfoundation",
+    "-framerate",
+    "24",
+    "-video_size",
+    "1280x720",
+    "-pixel_format",
+    "uyvy422",
+    "-i",
+    "0:none",
+  ];
+  assert.deepEqual(
+    captureArgs({ kind: "still", out: "b.jpg", ...custom }).slice(0, 12),
+    customInput,
+  );
+  assert.deepEqual(
+    captureArgs({ kind: "clip", out: "b.mp4", ...custom }).slice(0, 12),
+    customInput,
+  );
+  assert.equal(DEFAULT_FPS, 30);
 });
 
 async function fakeFfmpeg(width: number, height: number, exit = 0) {
@@ -744,6 +776,22 @@ test("capture still checks the size and refuses a calibration of another size", 
   );
 });
 
+test("capture still and clip use the same --size and --fps", async () => {
+  const dir = await workDir();
+  const out = join(dir, "still.png");
+  const bin = await fakeFfmpeg(1280, 720);
+  const text = await withPath(bin, () =>
+    runCaptureCommand(["still", out, "--size", "1280x720", "--fps", "15"]),
+  );
+  assert.match(text, /still=.*size=1280x720/);
+  await assert.rejects(
+    withPath(bin, () =>
+      runCaptureCommand(["still", out, "--size", "1920x1080"]),
+    ),
+    /camera returned 1280x720/,
+  );
+});
+
 test("calibrate and capture flags are validated", async () => {
   assert.deepEqual(parseTarget("1872x1404"), { width: 1872, height: 1404 });
   assert.throws(() => parseTarget("1872"), /WxH/);
@@ -764,6 +812,18 @@ test("calibrate and capture flags are validated", async () => {
     runCaptureCommand(["still", "x.jpg", "--seconds", "0"]),
     /positive integer/,
   );
+  await assert.rejects(
+    runCaptureCommand(["still", "x.jpg", "--fps", "0"]),
+    /positive integer/,
+  );
+  await assert.rejects(
+    runCaptureCommand(["still", "x.jpg", "--size", "1280"]),
+    /WxH/,
+  );
+  assert.deepEqual(parseSize("--size", "1280x720", "1920x1080"), {
+    width: 1280,
+    height: 720,
+  });
   const dir = await workDir();
   const image = await writeScene(dir);
   const out = join(dir, "calibration.json");

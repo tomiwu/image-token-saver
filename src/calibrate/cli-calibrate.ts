@@ -4,6 +4,7 @@ import { calibrate, type CalibrateOptions } from "./calibrate.ts";
 import {
   CAPTURE_SIZE,
   DEFAULT_CLIP_SECONDS,
+  DEFAULT_FPS,
   runCapture,
   type CaptureKind,
 } from "./capture.ts";
@@ -20,19 +21,23 @@ export function calibrateUsage(): string[] {
   return [
     "  image-token-saver calibrate --image <frame> [--out calibration.json] [--target WxH] [--aspect W:H] [--panel auto|light|dark] [--llm] [--llm-width <px>]",
     "  image-token-saver calibrate adjust <ok | side offset ...> [--cal calibration.json]",
-    `  image-token-saver capture <still|clip> <out> [--seconds <n>] [--cal calibration.json]  (macOS, ${CAPTURE_SIZE.width}x${CAPTURE_SIZE.height})`,
+    `  image-token-saver capture <still|clip> <out> [--seconds <n>] [--size WxH] [--fps <n>] [--cal calibration.json]  (macOS, default ${CAPTURE_SIZE.width}x${CAPTURE_SIZE.height})`,
     `  --cal <calibration.json> [--width <px>] on estimate, reduce and video warps the input first (default width ${DEFAULT_WARP_WIDTH}).`,
   ];
 }
 
-export function parseTarget(value: string): Size {
+export function parseSize(flag: string, value: string, example: string): Size {
   const match = /^(\d+)x(\d+)$/.exec(value);
   if (!match || Number(match[1]) < 1 || Number(match[2]) < 1) {
     throw new CliError(
-      'The --target value must be "WxH", for example 1872x1404.',
+      `The ${flag} value must be "WxH", for example ${example}.`,
     );
   }
   return { width: Number(match[1]), height: Number(match[2]) };
+}
+
+export function parseTarget(value: string): Size {
+  return parseSize("--target", value, "1872x1404");
 }
 
 export function parseAspect(value: string): number {
@@ -132,17 +137,36 @@ export async function runCalibrate(argv: string[]): Promise<string> {
   return calibrate(calibrateOptions(splitFlags(argv)));
 }
 
-export async function runCaptureCommand(argv: string[]): Promise<string> {
-  const flags = splitFlags(argv);
+function captureUsageError(): CliError {
+  return new CliError(
+    "Use: capture <still|clip> <out> [--seconds <n>] [--size WxH] [--fps <n>].",
+  );
+}
+
+function requireCapture(flags: Flags): { kind: CaptureKind; out: string } {
   const kind = flags.words[0];
   const out = flags.words[1];
-  if ((kind !== "still" && kind !== "clip") || !out) {
-    throw new CliError("Use: capture <still|clip> <out> [--seconds <n>].");
+  if (kind !== "still" && kind !== "clip") {
+    throw captureUsageError();
   }
+  if (!out) {
+    throw captureUsageError();
+  }
+  return { kind, out };
+}
+
+export async function runCaptureCommand(argv: string[]): Promise<string> {
+  const flags = splitFlags(argv);
   return runCapture({
-    kind: kind as CaptureKind,
-    out,
+    ...requireCapture(flags),
     seconds: optionalNumber(flags, "--seconds") ?? DEFAULT_CLIP_SECONDS,
     cal: flags.values.get("--cal"),
+    size: parseFlag(
+      flags,
+      "--size",
+      (value) => parseSize("--size", value, "1920x1080"),
+      CAPTURE_SIZE,
+    ),
+    fps: optionalNumber(flags, "--fps") ?? DEFAULT_FPS,
   });
 }
