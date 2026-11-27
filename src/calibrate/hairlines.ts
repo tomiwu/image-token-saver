@@ -936,11 +936,12 @@ function lineMedian(image: GrayImage, line: FittedLine): number {
 
 function isDarkRidge(image: GrayImage, line: FittedLine): boolean {
   const on = lineMedian(image, line);
-  const darker = Math.min(
-    bandMedian(image, line, 1),
-    bandMedian(image, line, -1),
+  const pos = bandMedian(image, line, 1);
+  const neg = bandMedian(image, line, -1);
+  return (
+    on + RIDGE_GAP < Math.min(pos, neg) &&
+    Math.abs(pos - neg) < MIN_REGION_SPLIT
   );
-  return on + RIDGE_GAP < darker;
 }
 
 function keepRegionLine(image: GrayImage, line: FittedLine): boolean {
@@ -977,7 +978,10 @@ function peakIsRidge(image: GrayImage, peak: EdgePeak): boolean {
   if (on === undefined || sides === undefined) {
     return false;
   }
-  return on + RIDGE_GAP < Math.min(sides[0], sides[1]);
+  return (
+    on + RIDGE_GAP < Math.min(sides[0], sides[1]) &&
+    Math.abs(sides[0] - sides[1]) < MIN_REGION_SPLIT
+  );
 }
 
 function stepPeaks(image: GrayImage, peaks: EdgePeak[]): EdgePeak[] {
@@ -1027,6 +1031,77 @@ function uniformBezel(
   return stripVariance(image, outer, inner) <= BEZEL_VAR_MAX;
 }
 
+const BEZEL_PANEL_GAP = 15;
+
+function inwardShift(side: Side): Point {
+  if (side === "left") {
+    return [24, 0];
+  }
+  if (side === "right") {
+    return [-24, 0];
+  }
+  if (side === "top") {
+    return [0, 24];
+  }
+  return [0, -24];
+}
+
+function stripMedian(
+  image: GrayImage,
+  outer: FittedLine,
+  inner: FittedLine,
+): number {
+  const values: number[] = [];
+  collectOffsetSamples(image, outer, signedGap(outer, inner) / 2, values);
+  return values.length === 0 ? 0 : median(values);
+}
+
+function shiftedMedian(
+  image: GrayImage,
+  line: FittedLine,
+  shift: Point,
+): number {
+  const values: number[] = [];
+  for (let i = 0; i < STRIP_SAMPLES; i++) {
+    const point = shiftedPoint(line, (i + 0.5) / STRIP_SAMPLES, 0);
+    const value = sampleGray(image, [point[0] + shift[0], point[1] + shift[1]]);
+    if (value !== undefined) {
+      values.push(value);
+    }
+  }
+  return values.length === 0 ? 0 : median(values);
+}
+
+function panelBeside(image: GrayImage, inner: FittedLine, side: Side): number {
+  return shiftedMedian(image, inner, inwardShift(side));
+}
+
+function exteriorBeside(
+  image: GrayImage,
+  outer: FittedLine,
+  side: Side,
+): number {
+  const [x, y] = inwardShift(side);
+  return shiftedMedian(image, outer, [-x, -y]);
+}
+
+function unlikeStrip(strip: number, neighbor: number): boolean {
+  return Math.abs(strip - neighbor) >= BEZEL_PANEL_GAP;
+}
+
+function bezelUnlikeNeighbors(
+  image: GrayImage,
+  outer: FittedLine,
+  inner: FittedLine,
+  side: Side,
+): boolean {
+  const strip = stripMedian(image, outer, inner);
+  return (
+    unlikeStrip(strip, panelBeside(image, inner, side)) &&
+    unlikeStrip(strip, exteriorBeside(image, outer, side))
+  );
+}
+
 function similarLine(a: FittedLine, b: FittedLine): boolean {
   return a !== b && a.kind === b.kind && parallel(a, b);
 }
@@ -1072,7 +1147,9 @@ function isBezelInner(
   side: Side,
 ): boolean {
   return (
-    isCloseInner(chosen, other, side) && uniformBezel(image, chosen, other)
+    isCloseInner(chosen, other, side) &&
+    uniformBezel(image, chosen, other) &&
+    bezelUnlikeNeighbors(image, chosen, other, side)
   );
 }
 
